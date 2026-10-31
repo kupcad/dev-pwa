@@ -3,7 +3,8 @@
 KupCAD in the browser, with a project of files: the tree of [`@kupcad/files`] beside
 [`@kupcad/playground`] (the editor, the model, its parameters and exports, on the core compiled
 to WebAssembly in a worker). The project is kept in the browser's private file system (OPFS), the
-app works offline, and a browser can install it (a PWA). An Astro site of one page.
+app works offline, and a browser can install it (a PWA). An Astro site of one page. Every push to
+`main` publishes it to GitHub Pages once its checks and tests pass (`.github/workflows/deploy.yml`).
 
 ## How it works
 
@@ -55,8 +56,9 @@ pnpm installs no version published less than a day ago; `@kupcad/*`, KupCAD's ow
 as soon as they are released (`pnpm-workspace.yaml`).
 
 Served from `dist/` as static files, over HTTPS (a service worker and OPFS need a secure origin;
-localhost is one). Serve `sw.js` with `Cache-Control: no-cache`, so a browser asks for it again
-on each visit.
+localhost is one). GitHub Pages serves every file with ten minutes of HTTP caching, which a new
+build doesn't wait out: a browser asks for `sw.js` itself past its HTTP cache, and the worker
+caches a build's files from the server (`cache: 'reload'`).
 
 ## Packages not yet released
 
