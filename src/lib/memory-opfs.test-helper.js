@@ -8,6 +8,8 @@ const failure = (what, name) => new DOMException(what, name);
 export class MemoryFile {
   kind = /** @type {const} */ ('file');
   bytes = new Uint8Array();
+  /** When it was written last: one more each write, as a clock would say later. */
+  modified = 0;
 
   /** @param {string} name */
   constructor(name) {
@@ -15,7 +17,7 @@ export class MemoryFile {
   }
 
   async getFile() {
-    return new File([this.bytes], this.name);
+    return new File([this.bytes], this.name, { lastModified: this.modified });
   }
 
   async createWritable() {
@@ -26,6 +28,7 @@ export class MemoryFile {
       write: async (data) => void chunks.push(data),
       close: async () => {
         this.bytes = new Uint8Array(await new Blob(chunks).arrayBuffer());
+        this.modified += 1;
       },
     };
   }

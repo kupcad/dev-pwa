@@ -98,6 +98,15 @@ export function opfsFiles(root) {
     readBytes: async (path) => new Uint8Array(await (await fileOf(path)).arrayBuffer()),
 
     /**
+     * What tells the file at `path` from the one it was: its size and when it was written.
+     * @param {string} path
+     */
+    async stat(path) {
+      const file = await fileOf(path);
+      return { size: file.size, lastModified: file.lastModified };
+    },
+
+    /**
      * Writes the file at `path`, made where it isn't, in a folder that is.
      * @param {string} path
      * @param {string | Uint8Array<ArrayBuffer>} data

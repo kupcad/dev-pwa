@@ -118,8 +118,13 @@ test("renames and deletes from a row's menu, the script open following", async (
   await page.keyboard.press('Enter');
   await expect(row(page, 'box.kup')).toHaveAttribute('aria-current', 'true');
   await expect(row(page, 'main.kup')).toHaveCount(0);
-  page.once('dialog', (dialog) => void dialog.accept());
   await choose(page, '/parts', 'Delete…');
+  const asked = page.getByRole('dialog', {
+    name: 'Delete the folder “parts” and everything in it?',
+  });
+  // Cancel is the one focused: Enter deletes nothing
+  await expect(asked.getByRole('button', { name: 'Cancel' })).toBeFocused();
+  await asked.getByRole('button', { name: 'Delete' }).click();
   await expect(row(page, 'tray.kup')).toHaveCount(0);
   await expect(row(page, 'parts')).toHaveCount(0);
   // box.kup imported what was deleted: its run says so
@@ -139,6 +144,132 @@ test("uploads the person's files into a folder, refusing what no script reads", 
   ]);
   await expect(files(page).getByText('sizes.json', { exact: true })).toBeVisible();
   await expect(files(page).getByRole('alert')).toContainText('notes.txt');
+});
+
+/**
+ * Drops `dropped` on the row of `path` (its tooltip), as files dragged from the system's file
+ * manager are.
+ * @param {Page} page
+ * @param {string} path
+ * @param {{ name: string, text: string }[]} dropped
+ */
+async function drop(page, path, dropped) {
+  const dataTransfer = await page.evaluateHandle((given) => {
+    const transfer = new DataTransfer();
+    for (const { name, text } of given) transfer.items.add(new File([text], name));
+    return transfer;
+  }, dropped);
+  const target = files(page).getByTitle(path, { exact: true });
+  await target.dispatchEvent('dragover', { dataTransfer });
+  await target.dispatchEvent('drop', { dataTransfer });
+}
+
+test("takes files dropped from the system's file manager into the folder dropped on", async ({
+  page,
+}) => {
+  await opened(page);
+  await drop(page, '/parts', [
+    { name: 'lid.kup', text: 'cube(4)\n' },
+    { name: 'notes.txt', text: 'notes' },
+  ]);
+  await expect(files(page).getByTitle('/parts/lid.kup', { exact: true })).toBeVisible();
+  await expect(files(page).getByRole('alert')).toContainText('notes.txt');
+});
+
+test('asks of a name the folder has: Rename keeps both, Cancel adds none', async ({ page }) => {
+  await opened(page);
+  await drop(page, '/parts/tray.kup', [{ name: 'tray.kup', text: 'cube(5)\n' }]);
+  const asked = page.getByRole('dialog', { name: '“tray.kup” is in parts already' });
+  await expect(asked).toContainText('add yours as “tray 2.kup”');
+  await expect(asked.getByRole('button', { name: 'Rename' })).toBeFocused();
+  await asked.getByRole('button', { name: 'Rename' }).click();
+  await expect(files(page).getByTitle('/parts/tray 2.kup', { exact: true })).toBeVisible();
+  await drop(page, '/parts', [
+    { name: 'cup.kup', text: 'cube(6)\n' },
+    { name: 'tray.kup', text: 'cube(7)\n' },
+  ]);
+  await expect(asked).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(asked).toHaveCount(0);
+  await expect(files(page).getByTitle('/parts/cup.kup', { exact: true })).toHaveCount(0);
+  // The original was kept as it was
+  await row(page, 'tray.kup').click();
+  await expect(page.locator('.cm-content')).toContainText('def tray');
+});
+
+test('refuses files dropped where nothing takes them, not to open them in place of the IDE', async ({
+  page,
+}) => {
+  await opened(page);
+  const refused = await page.evaluate(() => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(['cube(1)'], 'a.kup'));
+    const over = new DragEvent('dragover', {
+      dataTransfer: transfer,
+      bubbles: true,
+      cancelable: true,
+    });
+    document.querySelector('header')?.dispatchEvent(over);
+    return [over.defaultPrevented, transfer.dropEffect];
+  });
+  expect(refused).toEqual([true, 'none']);
+});
+
+test("opens a package's kupcad.json and kupcad.lock as JSON, edited and saved, nothing run", async ({
+  page,
+}) => {
+  await opened(page);
+  await drop(page, '/main.kup', [
+    { name: 'kupcad.json', text: '{\n  "name": "trays",\n  "version": "1.0.0"\n}\n' },
+    { name: 'kupcad.lock', text: '{\n  "version": "1.0.0",\n  "packages": {}\n}\n' },
+  ]);
+  await row(page, 'kupcad.lock').click();
+  await expect(page.locator('.cm-content')).toContainText('"packages": {}');
+  await row(page, 'kupcad.json').click();
+  await expect(row(page, 'kupcad.json')).toHaveAttribute('aria-current', 'true');
+  await expect(page.locator('.cm-content')).toContainText('"name": "trays"');
+  // Nothing run: no status, no model's parts
+  await expect(status(page)).toHaveCount(0);
+  // Highlighted as JSON: a key in a colour of its own
+  const colours = await page.evaluate(() => {
+    const key = [...document.querySelectorAll('.cm-line span')].find(
+      (span) => span.textContent === '"name"',
+    );
+    const line = key?.closest('.cm-line');
+    return key && line && [getComputedStyle(key).color, getComputedStyle(line).color];
+  });
+  expect(colours?.[0]).not.toBe(colours?.[1]);
+  // Edited, saved a moment after, and there after a reload
+  await page.locator('.cm-content').getByText('trays').dblclick();
+  await page.keyboard.type('bins');
+  await expect(row(page, 'kupcad.json')).toBeVisible();
+  await page.reload();
+  await expect(row(page, 'kupcad.json')).toHaveAttribute('aria-current', 'true', {
+    timeout: RUN_MS,
+  });
+  await expect(page.locator('.cm-content')).toContainText('"name": "bins"');
+});
+
+test("takes another tab's change to the JSON file open as JSON still, nothing run", async ({
+  page,
+}) => {
+  await opened(page);
+  await drop(page, '/main.kup', [{ name: 'kupcad.json', text: '{ "name": "trays" }\n' }]);
+  await row(page, 'kupcad.json').click();
+  await expect(page.locator('.cm-content')).toContainText('"name": "trays"');
+  // Another tab writes it, and this one comes back to the front
+  await page.evaluate(async () => {
+    const root = await navigator.storage.getDirectory();
+    const project = await root.getDirectoryHandle('project');
+    const file = await project.getFileHandle('kupcad.json');
+    const writable = await file.createWritable();
+    await writable.write('{ "name": "bins" }\n');
+    await writable.close();
+  });
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(page.locator('.cm-content')).toContainText('"name": "bins"');
+  await expect(status(page)).toHaveCount(0);
+  await expect(page.getByRole('list', { name: 'Parts' })).toHaveCount(0);
 });
 
 test('works offline once it has loaded, the core and all', async ({ page, context }) => {

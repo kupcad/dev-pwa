@@ -8,22 +8,26 @@ app works offline, and a browser can install it (a PWA). An Astro site of one pa
 
 ## How it works
 
-* **The project** (`src/lib/opfs.js`): a folder (`project`) of the origin's private file system,
-  made the first time with a starter (`src/lib/project.js`: `main.kup` importing
-  `parts/tray.kup`). The tree makes scripts and folders (its bar, a row's menu), renames and
-  deletes them, uploads files into a folder (Upload Files…: scripts and the files scripts read)
-  and downloads a file (Download), each from a row's right-click menu (`@kupcad/files`'
-  `ContextMenu`). A rename is a copy, then a removal: no rename is in every browser's OPFS. The
-  first write asks the browser to keep the project when it frees space
-  (`navigator.storage.persist()`).
+* **The project** (`@kupcad/files`' `Project` over `src/lib/opfs.js`): a folder (`project`) of the
+  origin's private file system, given a starter while it is empty (`src/lib/project.js`: `main.kup`
+  importing `parts/tray.kup`). The tree makes scripts and folders (its bar, a row's menu), renames
+  and deletes them, takes files into a folder (dropped on its row from the system's file manager, or
+  Upload Files…: scripts and the files scripts read; a name the folder has asked about, Replace,
+  Rename to the next free name or Cancel) and downloads a file (Download), each from a row's
+  right-click menu (`@kupcad/files`' `ContextMenu`), the questions in its `AskDialog`. Files dropped
+  anywhere else are refused, not opened in the IDE's place. A rename is a copy, then a removal: no
+  rename is in every browser's OPFS. The first write asks the browser to keep the project when it
+  frees space (`navigator.storage.persist()`).
 * **A script open** (`src/components/Ide.svelte`): opened in the playground as a document of its
-  own, its undo history kept while another is shown, with the files of its folder and the
-  folders in it for what it imports, by their paths from the script's folder (as `kupcad` run in
-  that folder reads them: `../` reaches nothing). It runs again when those files change. It is
-  saved half a second after each change, and at once with ⌘S (Ctrl+S); the page asks before it
-  closes on one not saved yet. The page coming back to the front reads the project again:
-  another tab's change to a script is taken where this one has none unsaved, and offered above
-  the editor where it has (Take theirs, Keep mine).
+  own, its undo history kept while another is shown, with the files of its folder and the folders in
+  it for what it imports, by their paths from the script's folder (as `kupcad` run in that folder
+  reads them: `../` reaches nothing). It runs again when those files change, each read again only
+  once its size or time written changed. A JSON file (a package's `kupcad.json` and `kupcad.lock`,
+  data a script imports) opens there too, highlighted and its syntax errors marked, with nothing
+  run. A file is saved half a second after each change, and at once with ⌘S (Ctrl+S); the page asks
+  before it closes on one not saved yet. The page coming back to the front reads the project again:
+  another tab's change to a script is taken where this one has none unsaved, and offered above the
+  editor where it has (Take theirs, Keep mine).
 * **Offline** (`integrations/service-worker.js`, `worker/service-worker.js`): once the site is
   built, an Astro integration writes `dist/sw.js`, the worker's code after the URL of every file
   of the build and their version (a hash of their paths and contents). Installed, the worker

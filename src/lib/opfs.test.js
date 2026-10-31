@@ -36,6 +36,17 @@ describe("the project's files", () => {
     expect(await files.read('/parts/lid.kup')).toBe('cube(3)\n');
   });
 
+  it('tell a file written again from the one it was, by its size and when it was written', async () => {
+    const files = await project();
+    const before = await files.stat('/main.kup');
+    await files.write('/main.kup', 'cube(1)\n');
+    const same = await files.stat('/main.kup');
+    await files.write('/main.kup', 'cube(2)\n');
+    const after = await files.stat('/main.kup');
+    expect(same.size).toBe(before.size);
+    expect(after.lastModified).toBeGreaterThan(same.lastModified);
+  });
+
   it('say whether a file or a folder is there', async () => {
     const files = await project();
     expect(

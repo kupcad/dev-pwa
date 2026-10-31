@@ -62,7 +62,8 @@ export function sameFiles(a, b) {
   if (paths.length !== Object.keys(b).length) return false;
   return paths.every((path) => {
     const [x, y] = [a[path], b[path]];
-    if (typeof x === 'string' || typeof y === 'string') return x === y;
+    if (x === y) return true;
+    if (typeof x === 'string' || typeof y === 'string') return false;
     return y !== undefined && x.length === y.length && x.every((byte, i) => byte === y[i]);
   });
 }
