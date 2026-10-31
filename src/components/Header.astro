@@ -1,0 +1,84 @@
+---
+// The IDE's header, small: KupCAD's icon and name, the Update a newer build offers (hidden until
+// then, updates.js), and the docs' and the website's links, each a cell of the website's frame.
+// The links open in a new tab, leaving the IDE as it is.
+import { LINKS } from '../site';
+---
+
+<header class="frame">
+  <a href="/" class="cell home" aria-label="KupCAD IDE">
+    <svg viewBox="0 0 660 660" aria-hidden="true" class="icon">
+      <use href="/icon.svg#kc-icon"></use>
+    </svg>
+    <span class="name">KupCAD</span>
+  </a>
+  <button type="button" class="cell update" data-update hidden>
+    Update <span aria-hidden="true">↻</span>
+  </button>
+  <nav aria-label="KupCAD" class="frame links">
+    <a class="cell" href={LINKS.docs} target="_blank" rel="noopener noreferrer">
+      Docs
+    </a>
+    <a class="cell" href={LINKS.website} target="_blank" rel="noopener noreferrer">
+      Website
+    </a>
+  </nav>
+</header>
+
+<style>
+  /* The website's frame: cells on the frame's colour, the gap between them */
+  .frame {
+    display: flex;
+    gap: 3px;
+    background: var(--site-frame);
+  }
+  header {
+    flex: none;
+    padding: 3px;
+  }
+  .cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 16px;
+    font: inherit;
+    font-size: 0.8125rem;
+    letter-spacing: 0.02em;
+    line-height: 1.4;
+    text-transform: uppercase;
+    text-decoration: none;
+    color: var(--kc-fg);
+    background: var(--site-paper);
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.15s;
+  }
+  .cell:hover {
+    background: var(--kc-bg);
+  }
+  .home {
+    flex: 1;
+    padding-left: 12px;
+  }
+  .icon {
+    width: 22px;
+    height: 22px;
+    flex: none;
+  }
+  .name {
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  /* A newer build, on the accent: the call to reload */
+  .update {
+    color: var(--kc-accent-fg);
+    background: var(--kc-accent);
+  }
+  .update:hover {
+    background: var(--kc-accent-hover);
+  }
+  .update[hidden] {
+    display: none;
+  }
+</style>

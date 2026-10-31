@@ -1,11 +1,58 @@
 ---
-import Welcome from '../components/Welcome.astro';
-import Layout from '../layouts/Layout.astro';
-
-// Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
-// Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
+// The IDE's one page: the header, then the IDE in the rest of the window, rendered in the browser
+// alone (`client:only`): its files are the browser's, and the core runs in a worker there. A
+// built page registers the service worker (the build writes it), which keeps it all for offline
+// use, and is an app the browser can install (the manifest).
+import Header from '../components/Header.astro';
+import Ide from '../components/Ide.svelte';
+import { SITE } from '../site';
+import '../styles/global.css';
 ---
 
-<Layout>
-	<Welcome />
-</Layout>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#e3e7eb" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)" />
+    <title>{SITE.title}</title>
+    <meta name="description" content={SITE.description} />
+    <link rel="canonical" href={new URL('/', Astro.site)} />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="generator" content={Astro.generator} />
+  </head>
+  <body>
+    <Header />
+    <main>
+      <Ide client:only="svelte">
+        <p slot="fallback" class="loading">
+          Loading KupCAD…
+        </p>
+      </Ide>
+    </main>
+    <script>
+      import { registerWorker } from '../lib/updates.js';
+
+      // A build's alone: under `astro dev` there is no worker, and pages change as they are saved
+      const update = document.querySelector('button[data-update]');
+      if (import.meta.env.PROD && update instanceof HTMLButtonElement) registerWorker(update);
+    </script>
+  </body>
+</html>
+
+<style>
+  .loading {
+    display: grid;
+    place-items: center;
+    height: 100%;
+    margin: 0;
+    font-size: 0.8125rem;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--kc-muted);
+  }
+</style>

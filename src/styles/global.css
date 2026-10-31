@@ -1,0 +1,47 @@
+/*
+  The IDE's look: the KupCAD brand's tokens (--kc-*, from @kupcad/ui, which draws the playground,
+  the tree and the website too) and the website's surfaces and font for the header, light or
+  dark as the system is.
+*/
+@import '@kupcad/ui/tokens.css';
+@import '@fontsource-variable/geist';
+
+/* The website's: its cards' paper, their frame, and the icon's colours (black on orange dark) */
+:root {
+  --site-paper: light-dark(var(--kc-section-bg), #111111);
+  --site-frame: light-dark(var(--kc-fg), var(--kc-border));
+  --kc-icon-bg: light-dark(#e0501c, #ff5f14);
+  --kc-icon-fg: light-dark(#f1efe8, #1a1b1c);
+}
+
+html {
+  height: 100%;
+  font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  color: var(--kc-fg);
+  background: var(--site-paper);
+}
+
+/* The header, then the IDE in all the window's height left */
+body {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  margin: 0;
+}
+
+main {
+  flex: 1;
+  min-height: 0;
+  background: var(--kc-bg);
+}
+
+::selection {
+  color: var(--kc-accent-fg);
+  background: var(--kc-accent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--kc-focus);
+  outline-offset: 2px;
+}

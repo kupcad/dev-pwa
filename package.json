@@ -2,6 +2,7 @@
   "name": "dev-pwa",
   "type": "module",
   "version": "0.0.1",
+  "private": true,
   "engines": {
     "node": ">=22.23.4"
   },
@@ -9,9 +10,33 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "check": "astro check && svelte-check --fail-on-warnings && tsc -p worker",
+    "test": "vitest run",
+    "test:browser": "playwright test",
+    "icons": "node scripts/make-icons.js",
+    "fmt": "prettier --write .",
+    "fmt:check": "prettier --check ."
   },
   "dependencies": {
-    "astro": "^7.4.4"
+    "@astrojs/svelte": "^9.1.2",
+    "@fontsource-variable/geist": "^5.3.0",
+    "@kupcad/files": "^0.1.5",
+    "@kupcad/playground": "^0.1.5",
+    "@kupcad/protocol": "^0.1.5",
+    "@kupcad/ui": "^0.1.5",
+    "astro": "^7.4.4",
+    "svelte": "^5.57.3"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.12",
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^26.6.6",
+    "prettier": "^3.9.10",
+    "prettier-plugin-astro": "^1.1.2",
+    "prettier-plugin-svelte": "^4.1.1",
+    "svelte-check": "^4.7.7",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.5"
   }
 }
