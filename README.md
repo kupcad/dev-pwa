@@ -30,23 +30,29 @@ app works offline, and a browser can install it (a PWA). An Astro site of one pa
   build is a new worker, which waits until the header's Update says to take over
   (`src/lib/updates.js`), and the page reloads on it.
 * **Installable**: `public/manifest.webmanifest`, the icon (`public/icon.svg`, the website's)
-  and its PNGs (`public/icons/`, drawn by `npm run icons`, `scripts/make-icons.js`).
+  and its PNGs (`public/icons/`, drawn by `pnpm icons`, `scripts/make-icons.js`).
 * **The header** (`src/components/Header.astro`): the website's frame and font, small, with the
   docs' and the website's links (`src/site.js`).
 
 ## Commands
 
+Requires the Node version in [`.tool-versions`](.tool-versions) and pnpm (12 or later).
+
 ```sh
-npm install
-npm run dev            # astro dev: the IDE as you change it (no service worker)
-npm run build          # dist/, sw.js with it
-npm run preview        # dist/ served, the service worker working
-npm run check          # astro check, svelte-check, and the worker's own types (worker/tsconfig.json)
-npm run fmt            # prettier: what `fmt:check` checks
-npm test               # Vitest: OPFS (over a stand-in in memory), the project, the worker's build, updates
-npm run test:browser   # Playwright: the site built and driven in Chromium, offline too
-npm run icons          # public/icons/ from public/icon.svg
+pnpm install
+pnpm dev               # astro dev: the IDE as you change it (no service worker)
+pnpm build             # dist/, sw.js with it
+pnpm preview           # dist/ served, the service worker working
+pnpm check             # astro check, svelte-check, and the worker's own types (worker/tsconfig.json)
+pnpm fmt               # prettier: what `fmt:check` checks
+pnpm test              # Vitest: OPFS (over a stand-in in memory), the project, the worker's build, updates
+pnpm exec playwright install chromium   # once: the browser the next one drives
+pnpm test:browser      # Playwright: the site built and driven in Chromium, offline too
+pnpm icons             # public/icons/ from public/icon.svg
 ```
+
+pnpm installs no version published less than a day ago; `@kupcad/*`, KupCAD's own, are taken
+as soon as they are released (`pnpm-workspace.yaml`).
 
 Served from `dist/` as static files, over HTTPS (a service worker and OPFS need a secure origin;
 localhost is one). Serve `sw.js` with `Cache-Control: no-cache`, so a browser asks for it again
@@ -56,7 +62,7 @@ on each visit.
 
 The IDE installs `@kupcad/*` from npm. To try a change in one before it is released, pack it in
 the monorepo (`pnpm pack`, in `packages/kupcad-<name>`) and install the tarball here
-(`npm install path/to/kupcad-<name>-<version>.tgz`), then put the range back before committing.
+(`pnpm add path/to/kupcad-<name>-<version>.tgz`), then put the range back before committing.
 
 [`@kupcad/files`]: https://github.com/kupcad/kupcad/tree/main/packages/kupcad-files
 [`@kupcad/playground`]: https://github.com/kupcad/kupcad/tree/main/packages/kupcad-playground

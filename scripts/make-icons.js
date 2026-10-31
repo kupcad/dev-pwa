@@ -1,7 +1,7 @@
 // Writes the app's PNG icons (public/icons/) from its SVG one (public/icon.svg, the website's),
 // drawn by Playwright's Chromium at each size: the icon as it is (192 and 512 pixels, for the
 // manifest), a maskable one with room around the mark for the shape a system cuts it to (all of
-// it within the middle 80%), and the home screen icon iOS takes. Run `npm run icons` after
+// it within the middle 80%), and the home screen icon iOS takes. Run `pnpm icons` after
 // changing public/icon.svg, and commit what changes.
 
 import { chromium } from '@playwright/test';
