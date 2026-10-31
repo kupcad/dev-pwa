@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
-import { offerUpdates } from './updates.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CHECK_MS, checkForUpdates, offerUpdates } from './updates.js';
 
 /**
  * A page on a registration whose worker may be waiting, its button, and what they did.
@@ -54,5 +54,72 @@ describe("the header's Update", () => {
     const page = pageOn({ controlled: false });
     page.workers.dispatchEvent(new Event('controllerchange'));
     expect(page.reload).not.toHaveBeenCalled();
+  });
+});
+
+describe('looking for a newer build while the page stays open', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  /**
+   * A page in front, its registration just made, and how the page goes to the back or the front.
+   * @param {() => Promise<void>} [update] what looking does
+   */
+  function openPage(update = async () => {}) {
+    const page = Object.assign(new EventTarget(), { visibilityState: 'visible' });
+    // Looks counted by hand: a spy (vi.fn) handles the promise it returns, and so would hide a
+    // failed look the page left unhandled
+    let looks = 0;
+    const registration = {
+      update: () => {
+        looks += 1;
+        return update();
+      },
+    };
+    checkForUpdates(/** @type {any} */ (registration), /** @type {any} */ (page));
+    /** @param {'visible' | 'hidden'} state */
+    const turn = (state) => {
+      page.visibilityState = state;
+      page.dispatchEvent(new Event('visibilitychange'));
+    };
+    return { looks: () => looks, turn };
+  }
+
+  it('looks every hour the page stays in front', () => {
+    const { looks } = openPage();
+    vi.advanceTimersByTime(CHECK_MS - 1);
+    expect(looks()).toBe(0);
+    vi.advanceTimersByTime(1);
+    expect(looks()).toBe(1);
+    vi.advanceTimersByTime(CHECK_MS);
+    expect(looks()).toBe(2);
+  });
+
+  it('looks as the page comes back to the front an hour or more after the last look', () => {
+    const { looks, turn } = openPage();
+    turn('hidden');
+    // In the back, the hour passes without a look
+    vi.advanceTimersByTime(3 * CHECK_MS);
+    expect(looks()).toBe(0);
+    turn('visible');
+    expect(looks()).toBe(1);
+    turn('hidden');
+    turn('visible');
+    expect(looks()).toBe(1);
+  });
+
+  it('looks no sooner than an hour after registering, which looked', () => {
+    const { looks, turn } = openPage();
+    vi.advanceTimersByTime(CHECK_MS / 2);
+    turn('hidden');
+    turn('visible');
+    expect(looks()).toBe(0);
+  });
+
+  it('says nothing of a look that fails (offline), and looks again the next hour', async () => {
+    const { looks } = openPage(() => Promise.reject(new TypeError('Failed to fetch')));
+    await vi.advanceTimersByTimeAsync(CHECK_MS);
+    await vi.advanceTimersByTimeAsync(CHECK_MS);
+    expect(looks()).toBe(2);
   });
 });

@@ -29,7 +29,9 @@ app works offline, and a browser can install it (a PWA). An Astro site of one pa
   of the build and their version (a hash of their paths and contents). Installed, the worker
   caches them all and answers each request for one, and any navigation, from the cache. A new
   build is a new worker, which waits until the header's Update says to take over
-  (`src/lib/updates.js`), and the page reloads on it.
+  (`src/lib/updates.js`), and the page reloads on it. A browser looks for one as a page loads; a
+  page left open (an installed app's window) looks again as it comes back to the front, and every
+  hour it stays there.
 * **Installable**: `public/manifest.webmanifest`, the icon (`public/icon.svg`, the website's)
   and its PNGs (`public/icons/`, drawn by `pnpm icons`, `scripts/make-icons.js`).
 * **The header** (`src/components/Header.astro`): the website's frame and font, small, with the
