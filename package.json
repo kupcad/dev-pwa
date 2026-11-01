@@ -21,10 +21,10 @@
   "dependencies": {
     "@astrojs/svelte": "^9.1.2",
     "@fontsource-variable/geist": "^5.3.0",
-    "@kupcad/files": "^0.1.7",
-    "@kupcad/playground": "^0.1.7",
-    "@kupcad/protocol": "^0.1.7",
-    "@kupcad/ui": "^0.1.7",
+    "@kupcad/files": "^0.1.8",
+    "@kupcad/playground": "^0.1.8",
+    "@kupcad/protocol": "^0.1.8",
+    "@kupcad/ui": "^0.1.8",
     "astro": "^7.4.4",
     "svelte": "^5.57.3"
   },
