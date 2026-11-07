@@ -6,7 +6,7 @@
   (NameDialog, refused as workspaces.js refuses one; a rename may keep its own name, in another
   case too); deleting asks first (@kupcad/files' AskDialog), saying what is lost (its files
   counted as it asks). The last workspace can't
-  be deleted: its menu has no Delete….
+  be deleted: its Delete… is greyed out.
 -->
 <script>
   import { AskDialog, ContextMenu } from '@kupcad/files';
@@ -64,7 +64,7 @@
   let menu = $state.raw(/** @type {{ x: number, y: number } | null} */ (null));
   let picker = $state(/** @type {HTMLInputElement | undefined} */ (undefined));
 
-  /** The menu of the one open: Delete… only while another is left (the last can't be deleted). */
+  /** The menu of the one open: Delete… greyed out while it is the last (it can't be deleted). */
   const items = $derived.by(() => {
     /** @type {MenuItem[]} */
     const all = [
@@ -72,8 +72,9 @@
       { text: 'Duplicate…', action: startDuplicate },
       { text: 'Download .zip', action: () => ondownload(current) },
       { text: 'Import .zip…', action: () => picker?.click() },
+      '-',
+      { text: 'Delete…', action: startDelete, enabled: names.length > 1 },
     ];
-    if (names.length > 1) all.push('-', { text: 'Delete…', action: startDelete });
     return all;
   });
 

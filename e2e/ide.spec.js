@@ -301,11 +301,11 @@ test('keeps each workspace a project of its own: made, switched between, and del
 }) => {
   const errors = await opened(page);
   await expect(picker(page)).toHaveValue('Default');
-  // The last workspace can't be deleted: its menu has no Delete…
+  // The last workspace can't be deleted: its Delete… is greyed out
   await page.getByRole('button', { name: 'Workspace actions' }).click();
   const actions = page.getByRole('menu', { name: 'Workspace “Default”' });
   await expect(actions.getByRole('menuitem', { name: 'Download .zip' })).toBeVisible();
-  await expect(actions.getByRole('menuitem', { name: 'Delete…' })).toHaveCount(0);
+  await expect(actions.getByRole('menuitem', { name: 'Delete…' })).toBeDisabled();
   await page.keyboard.press('Escape');
 
   // A name the workspaces have, in any case, or none, is refused in the dialog
@@ -627,7 +627,7 @@ test('makes Default only on a first visit: renamed, then deleted, it never comes
     page
       .getByRole('menu', { name: 'Workspace “Other”' })
       .getByRole('menuitem', { name: 'Delete…' }),
-  ).toHaveCount(0);
+  ).toBeDisabled();
   await page.keyboard.press('Escape');
   expect(errors).toEqual([]);
 });

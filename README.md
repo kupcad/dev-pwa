@@ -34,7 +34,7 @@ app works offline, and a browser can install it (a PWA). An Astro site of one pa
   A zip is refused where a path leaves its folder (`..`, absolute, a `\`), a file's CRC is wrong,
   or it holds more than 10 000 files or 256 MB. Delete… deletes the one open with its files, once
   a dialog confirms it (saying how many files and bytes that is), and opens the first in the list;
-  the last workspace can't be deleted (its menu has no Delete…). The URL names the workspace open (`#w=<name>`,
+  the last workspace can't be deleted (its Delete… is greyed out). The URL names the workspace open (`#w=<name>`,
   URI-encoded, replaced, not added to the history): a page opens the one it names (else the one
   open last, else the first in the list), and opens another as the person changes it, so two tabs can work in
   two workspaces. A tab tells the others of a workspace made, renamed or deleted

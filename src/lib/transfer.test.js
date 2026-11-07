@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { memoryFolder } from './memory-opfs.test-helper.js';
 import { opfsFiles } from './opfs.js';
-import { folderOf, freeName, transfer } from './transfer.js';
+import { folderOf, transfer } from './transfer.js';
 
 /** Two workspaces' files: one with a script and a folder of two, the other with `/main.kup`. */
 async function twoWorkspaces() {
@@ -100,15 +100,5 @@ describe('the folder a file is taken to', () => {
     ['.hidden', null],
   ])('%j: %j', (typed, folder) => {
     expect(folderOf(typed)).toBe(folder);
-  });
-});
-
-describe('a free name', () => {
-  it('numbers the stem, from 2 or from the number it has', async () => {
-    const taken = new Set(['lid 2.kup']);
-    const free = async (/** @type {string} */ name) => !taken.has(name);
-    expect(await freeName('lid.kup', free)).toBe('lid 3.kup');
-    expect(await freeName('lid 3.kup', free)).toBe('lid 4.kup');
-    expect(await freeName('parts', free)).toBe('parts 2');
   });
 });

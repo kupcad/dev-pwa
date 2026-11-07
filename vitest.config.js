@@ -2,7 +2,7 @@
 // site's build compiles it (@kupcad/files' Svelte): its modules in Node (the project's files over
 // a stand-in for the browser's private file system, zips, the build's service worker), and its
 // components (*.svelte.test.js) mounted under jsdom, as the KupCAD packages test theirs, with
-// what jsdom lacks of a browser set up first (src/components/dom.test-helper.js). The IDE in a
+// what jsdom lacks of a browser set up first (@kupcad/files/jsdom). The IDE in a
 // browser is the Playwright suite's (e2e/).
 /// <reference types="vitest/config" />
 import { svelteTesting } from '@testing-library/svelte/vite';
@@ -27,7 +27,7 @@ export default getViteConfig({
           name: 'components',
           environment: 'jsdom',
           include: ['src/**/*.svelte.test.js'],
-          setupFiles: ['src/components/dom.test-helper.js'],
+          setupFiles: ['@kupcad/files/jsdom'],
         },
       },
     ],

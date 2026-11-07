@@ -3,7 +3,7 @@
 // upload's is (@kupcad/files' clashQuestion): Replace, Rename to the next free name (keeping
 // both), or Cancel. A move is a copy, then the removal of what was copied.
 
-import { childPath, nameOf, nameProblem } from '@kupcad/files';
+import { childPath, freeName, nameOf, nameProblem } from '@kupcad/files';
 
 /** @import { Clash } from '@kupcad/files' */
 /** @import { ProjectFiles } from './opfs.js' */
@@ -21,24 +21,6 @@ export function folderOf(typed) {
     .filter((name) => name !== '');
   if (names.some((name) => nameProblem(name) !== null)) return null;
   return `/${names.join('/')}`;
-}
-
-/**
- * The first free name of `name`'s with a number after its stem, as a file manager keeps both
- * (`lid 2.kup`, then `lid 3.kup`): the rule @kupcad/files' putFiles names an upload by, which
- * the package doesn't export.
- * @param {string} name
- * @param {(name: string) => Promise<boolean>} free
- */
-export async function freeName(name, free) {
-  const dot = name.lastIndexOf('.');
-  const [stem, extension] = dot > 0 ? [name.slice(0, dot), name.slice(dot)] : [name, ''];
-  const numbered = /^(.*) (\d+)$/.exec(stem);
-  const base = numbered ? numbered[1] : stem;
-  for (let n = numbered ? Number(numbered[2]) + 1 : 2; ; n += 1) {
-    const candidate = `${base} ${n}${extension}`;
-    if (await free(candidate)) return candidate;
-  }
 }
 
 /**

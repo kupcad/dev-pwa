@@ -66,13 +66,22 @@ describe('the workspaces’ bar', () => {
     expect(onrename.mock.calls).toEqual([['Default', 'Main']]);
   });
 
-  it('offers no Delete… of the last workspace', async () => {
+  it('greys out Delete… of the last workspace', async () => {
     bar('Shelf', ['Shelf']);
-    expect((await menuItems()).map((item) => item.textContent?.trim())).toEqual([
+    const items = await menuItems();
+    expect(items.map((item) => item.textContent?.trim())).toEqual([
       'Rename…',
       'Duplicate…',
       'Download .zip',
       'Import .zip…',
+      'Delete…',
+    ]);
+    expect(items.map((item) => /** @type {HTMLButtonElement} */ (item).disabled)).toEqual([
+      false,
+      false,
+      false,
+      false,
+      true,
     ]);
   });
 
