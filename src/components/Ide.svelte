@@ -2,10 +2,10 @@
   @component
   The IDE: a project's files beside the playground, all in the browser. The project (@kupcad/files'
   Project) is a workspace's folder of the browser's private file system (opfs.js, workspaces.js),
-  given a starter while it is empty (project.js). The workspaces are above the files (Workspaces):
-  one picked opens its own project (the one open saved first), New… makes one and opens it, and
-  Delete… deletes the one open with its files, the default left open; each opens the file it had
-  open last. Its tree (@kupcad/files) makes scripts and folders (its bar, a row's menu),
+  the default given a starter while it is empty (project.js). The workspaces are above the files
+  (Workspaces): one picked opens its own project (the one open saved first), New workspace… makes
+  one, empty, and opens it, and Delete… deletes the one open with its files, the default left
+  open; each opens the file it had open last. Its tree (@kupcad/files) makes scripts and folders (its bar, a row's menu),
   renames and deletes them, takes the person's files into a folder (dropped on it from the
   system's file manager, or uploaded from a row's menu: a name the folder has asked about,
   Replace, Rename or Cancel) and downloads one (a row's menu, a popover). A script clicked opens
@@ -212,7 +212,7 @@
   }
 
   /**
-   * Makes a workspace and opens it, with the starter.
+   * Makes a workspace, empty, and opens it.
    * @param {string} name
    */
   async function createWorkspace(name) {
@@ -255,12 +255,14 @@
   }
 
   /**
-   * Opens the project, given the starter while it is empty (the first time, or everything
-   * deleted), and the file open last (else its main script, else its first).
+   * Opens the workspace's project, and the file open last (else its main script, else its
+   * first). The default is given the starter, as an example, while it is empty (the first time,
+   * or everything deleted); another starts as it was made, empty.
    */
   async function start() {
     try {
-      if ((await fs.readDir(ROOT)).length === 0) {
+      const empty = (await fs.readDir(ROOT)).length === 0;
+      if (empty && workspace === DEFAULT_WORKSPACE) {
         for (const [path, text] of Object.entries(STARTER)) {
           await fs.mkdir(parentOf(path));
           await fs.write(path, text);

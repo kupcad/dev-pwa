@@ -293,10 +293,12 @@ test('keeps each workspace a project of its own: made, switched between, and del
   await making.getByRole('button', { name: 'Create' }).click();
   await expect(making).toBeHidden();
 
-  // The new one opens on the starter, run
+  // The new one opens empty: only the default is given the starter
   await expect(picker).toHaveValue('Shelf');
-  await expect(row(page, 'main.kup')).toHaveAttribute('aria-current', 'true', { timeout: RUN_MS });
-  await expect(status(page)).toHaveText(/Ready · \d+ ms/, { timeout: RUN_MS });
+  await expect(
+    page.getByText('Open a script from the files, or make one with New script.'),
+  ).toBeVisible();
+  await expect(row(page, 'main.kup')).toHaveCount(0);
   await files(page).getByRole('button', { name: 'New script' }).click();
   await files(page).getByRole('textbox', { name: 'New script name' }).fill('shelf');
   await page.keyboard.press('Enter');

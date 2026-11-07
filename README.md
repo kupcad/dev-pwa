@@ -12,12 +12,12 @@ app works offline, and a browser can install it (a PWA). An Astro site of one pa
   own, each a folder of the origin's private file system under `workspaces/` (OPFS has no
   namespaces). `Default` is always there and can't be deleted. New workspace… asks a name in a
   dialog (not empty, at most 64 characters, no `/` or `\`, not one there is in any case) and opens
-  the new one on the starter; picking one in the list saves the one open and opens it, on the file
+  the new one, empty: only `Default` is given the starter, as an example; picking one in the list saves the one open and opens it, on the file
   it had open last; Delete… deletes the one open with its files, once a dialog confirms it, and
   opens `Default`. A workspace deleted in another tab is left for `Default` when the page comes
   back to the front.
 * **The project** (`@kupcad/files`' `Project` over `src/lib/opfs.js`): the workspace open's folder,
-  given a starter while it is empty (`src/lib/project.js`: `main.kup`
+  `Default`'s given a starter while it is empty (`src/lib/project.js`: `main.kup`
   importing `parts/tray.kup`). The tree makes scripts and folders (its bar, a row's menu), renames
   and deletes them, takes files into a folder (dropped on its row from the system's file manager, or
   Upload Files…: scripts and the files scripts read; a name the folder has asked about, Replace,
