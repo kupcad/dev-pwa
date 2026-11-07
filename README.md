@@ -11,11 +11,17 @@ app works offline, and a browser can install it (a PWA). An Astro site of one pa
 * **Workspaces** (`src/components/Workspaces.svelte`, `src/lib/workspaces.js`): projects of their
   own, each a folder of the origin's private file system under `workspaces/` (OPFS has no
   namespaces). `Default` is always there and can't be deleted. New workspace… asks a name in a
-  dialog (not empty, at most 64 characters, no `/` or `\`, not one there is in any case) and opens
-  the new one, empty: only `Default` is given the starter, as an example; picking one in the list saves the one open and opens it, on the file
-  it had open last; Delete… deletes the one open with its files, once a dialog confirms it, and
-  opens `Default`. A workspace deleted in another tab is left for `Default` when the page comes
-  back to the front.
+  dialog (`NameDialog.svelte`: not empty, at most 64 characters, no `/` or `\`, not one there is
+  in any case) and opens the new one, empty: only `Default` is given the starter, as an example.
+  Picking one in the list saves the one open and opens it, on the file it had open last. The ⋯
+  menu beside the list has the rest. Download .zip saves the one open as a zip of its files in a
+  folder named for it (`src/lib/zip.js`: deflated with the browser's own `CompressionStream`, no
+  library); Import .zip… makes a new workspace of a zip, named after the zip's file (a number
+  added where the name is taken), its files with or without a folder of their own around them.
+  A zip is refused where a path leaves its folder (`..`, absolute, a `\`), a file's CRC is wrong,
+  or it holds more than 10 000 files or 256 MB. Delete… deletes the one open with its files, once
+  a dialog confirms it, and opens `Default`. A workspace deleted in another tab is left for
+  `Default` when the page comes back to the front.
 * **The project** (`@kupcad/files`' `Project` over `src/lib/opfs.js`): the workspace open's folder,
   `Default`'s given a starter while it is empty (`src/lib/project.js`: `main.kup`
   importing `parts/tray.kup`). The tree makes scripts and folders (its bar, a row's menu), renames
@@ -61,7 +67,7 @@ pnpm preview           # dist/ served, the service worker working
 pnpm check             # lint, fmt:check, astro check, svelte-check, and the worker's own types (worker/tsconfig.json)
 pnpm lint              # oxlint
 pnpm fmt               # oxfmt, and prettier for .svelte and .astro: what `fmt:check` checks
-pnpm test              # Vitest: OPFS and workspaces (over a stand-in in memory), the project, the worker's build, updates
+pnpm test              # Vitest: OPFS and workspaces (over a stand-in in memory), zips, the project, the worker's build, updates
 pnpm exec playwright install chromium   # once: the browser the next one drives
 pnpm test:browser      # Playwright: the site built and driven in Chromium, offline too
 pnpm icons             # public/icons/ from public/icon.svg

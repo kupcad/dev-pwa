@@ -4,8 +4,9 @@
   Project) is a workspace's folder of the browser's private file system (opfs.js, workspaces.js),
   the default given a starter while it is empty (project.js). The workspaces are above the files
   (Workspaces): one picked opens its own project (the one open saved first), New workspace… makes
-  one, empty, and opens it, and Delete… deletes the one open with its files, the default left
-  open; each opens the file it had open last. Its tree (@kupcad/files) makes scripts and folders (its bar, a row's menu),
+  one, empty, and opens it, Download .zip saves the one open as a zip, Import .zip… makes one of a
+  zip and opens it, and Delete… deletes the one open with its files, the default left open; each
+  opens the file it had open last. Its tree (@kupcad/files) makes scripts and folders (its bar, a row's menu),
   renames and deletes them, takes the person's files into a folder (dropped on it from the
   system's file manager, or uploaded from a row's menu: a name the folder has asked about,
   Replace, Rename or Cancel) and downloads one (a row's menu, a popover). A script clicked opens
@@ -41,6 +42,7 @@
   import { opfsFiles } from '../lib/opfs.js';
   import { importable, MAIN_SCRIPT, sameFiles, STARTER, stemOf } from '../lib/project.js';
   import { DEFAULT_WORKSPACE, workspaces } from '../lib/workspaces.js';
+  import { MAX_ZIP_BYTES } from '../lib/zip.js';
   import Workspaces from './Workspaces.svelte';
 
   /** @import { Clash, Entry, MenuItem } from '@kupcad/files' */
@@ -252,6 +254,46 @@
     } finally {
       busy = false;
     }
+  }
+
+  /**
+   * Saves the workspace `name` (the one open, saved first) to the person's downloads, as a zip.
+   * @param {string} name
+   */
+  async function downloadWorkspace(name) {
+    busy = true;
+    try {
+      keepEditor();
+      await saveAll();
+      download(await spaces.toZip(name), `${name}.zip`);
+    } catch (error) {
+      problem = `The workspace “${name}” wasn't downloaded: ${errorText(error)}`;
+    } finally {
+      busy = false;
+    }
+  }
+
+  /**
+   * Makes the workspace `name` of the zip `file`'s files, and opens it.
+   * @param {File} file
+   * @param {string} name
+   */
+  async function importWorkspace(file, name) {
+    busy = true;
+    let made;
+    try {
+      if (file.size > MAX_ZIP_BYTES) {
+        throw new Error(`It is larger than ${MAX_ZIP_BYTES / 1024 / 1024} MB.`);
+      }
+      made = await spaces.fromZip(name, new Uint8Array(await file.arrayBuffer()));
+      workspaceNames = await spaces.list();
+    } catch (error) {
+      problem = `${file.name} wasn't imported: ${errorText(error)}`;
+      return;
+    } finally {
+      busy = false;
+    }
+    await switchWorkspace(made);
   }
 
   /**
@@ -617,6 +659,8 @@
       onswitch={(name) => void switchWorkspace(name)}
       oncreate={(name) => void createWorkspace(name)}
       onremove={(name) => void removeWorkspace(name)}
+      ondownload={(name) => void downloadWorkspace(name)}
+      onimport={(file, name) => void importWorkspace(file, name)}
     />
     <div class="tree">
       <FileTree

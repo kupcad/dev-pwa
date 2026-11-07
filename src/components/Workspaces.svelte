@@ -1,12 +1,18 @@
 <!--
   @component
-  The workspaces, above the files: New workspace… on a row of its own (a dialog asking the name,
-  refused as workspaces.js refuses one), then the one open, picked from the list, and Delete…
-  beside it, which deletes it with all its files once the person confirms it (a dialog too). The
-  default can't be deleted.
+  The workspaces, above the files: New workspace… on a row of its own, then the one open, picked
+  from the list, and its menu (⋯, @kupcad/files' ContextMenu): Download .zip, Import .zip… (a
+  zip picked becomes a new workspace) and Delete…. A name is asked in a dialog (NameDialog,
+  refused as workspaces.js refuses one); deleting asks first (@kupcad/files' AskDialog), saying
+  what is lost. The default can't be deleted: its menu has no Delete….
 -->
 <script>
-  import { DEFAULT_WORKSPACE, MAX_WORKSPACE_NAME, workspaceNameError } from '../lib/workspaces.js';
+  import { AskDialog, ContextMenu } from '@kupcad/files';
+  import { DEFAULT_WORKSPACE, uniqueWorkspaceName } from '../lib/workspaces.js';
+  import { stemOf } from '../lib/project.js';
+  import NameDialog from './NameDialog.svelte';
+
+  /** @import { MenuItem } from '@kupcad/files' */
 
   /**
    * @typedef {object} Props
@@ -16,50 +22,80 @@
    * @property {(name: string) => void} onswitch the person picked another
    * @property {(name: string) => void} oncreate the person named a new one (trimmed, refused by none)
    * @property {(name: string) => void} onremove the person confirmed deleting the one open
+   * @property {(name: string) => void} ondownload the person asked for the one open as a zip
+   * @property {(file: File, name: string) => void} onimport the person picked a zip to import,
+   *   and named the workspace it makes
    */
 
   /** @type {Props} */
-  let { names, current, busy = false, onswitch, oncreate, onremove } = $props();
+  let {
+    names,
+    current,
+    busy = false,
+    onswitch,
+    oncreate,
+    onremove,
+    ondownload,
+    onimport,
+  } = $props();
 
-  let creating = $state(/** @type {HTMLDialogElement | undefined} */ (undefined));
-  let removing = $state(/** @type {HTMLDialogElement | undefined} */ (undefined));
-  /** The name being typed for a new workspace. */
-  let name = $state('');
-  /** Whether the person has tried to make it: until then, an empty name isn't called wrong. */
-  let tried = $state(false);
-  /** Why the name typed can't be a new workspace's, or null. */
-  const nameError = $derived(workspaceNameError(name, names));
+  /**
+   * The name asked: what for, the name it starts with, and what is done with the one given.
+   * @type {{ title: string, action: string, value: string, done: (name: string) => void } | null}
+   */
+  let naming = $state.raw(null);
+  /** Whether deleting the one open is being asked. */
+  let deleting = $state(false);
+  /** The menu shown, where it opened. */
+  let menu = $state.raw(/** @type {{ x: number, y: number } | null} */ (null));
+  let picker = $state(/** @type {HTMLInputElement | undefined} */ (undefined));
 
-  function startCreate() {
-    name = '';
-    tried = false;
-    creating?.showModal();
+  /** The menu of the one open: the default's has nothing that would delete it. */
+  const items = $derived(
+    /** @type {MenuItem[]} */ ([
+      { text: 'Download .zip', action: () => ondownload(current) },
+      { text: 'Import .zip…', action: () => picker?.click() },
+      ...(current === DEFAULT_WORKSPACE
+        ? []
+        : /** @type {MenuItem[]} */ (['-', { text: 'Delete…', action: () => (deleting = true) }])),
+    ]),
+  );
+
+  /** @param {MouseEvent & { currentTarget: HTMLButtonElement }} event */
+  function openMenu(event) {
+    const { left, bottom } = event.currentTarget.getBoundingClientRect();
+    menu = { x: left, y: bottom + 2 };
   }
 
-  /** @param {SubmitEvent} event */
-  function create(event) {
-    event.preventDefault();
-    tried = true;
-    if (nameError !== null) return;
-    creating?.close();
-    oncreate(name.trim());
+  /** The name asked given: the dialog dropped, then what it was asked for done. @param {string} name */
+  function named(name) {
+    const done = naming?.done;
+    naming = null;
+    done?.(name);
   }
 
-  /** @param {SubmitEvent} event */
-  function remove(event) {
-    event.preventDefault();
-    removing?.close();
-    onremove(current);
+  /** @param {Event & { currentTarget: HTMLInputElement }} event the zip picked to import */
+  function picked(event) {
+    const [file] = event.currentTarget.files ?? [];
+    event.currentTarget.value = '';
+    if (!file) return;
+    naming = {
+      title: 'Import workspace',
+      action: 'Import',
+      value: uniqueWorkspaceName(stemOf(file.name), names),
+      done: (name) => onimport(file, name),
+    };
   }
 </script>
 
 <div class="workspaces">
   <button
     type="button"
-    class="kc-control new"
-    title="New workspace"
+    class="kc-control"
     disabled={busy}
-    onclick={startCreate}>New workspace…</button
+    onclick={() =>
+      (naming = { title: 'New workspace', action: 'Create', value: '', done: oncreate })}
+    >New workspace…</button
   >
   <div class="open">
     <select
@@ -81,61 +117,54 @@
     <button
       type="button"
       class="kc-control"
-      title={current === DEFAULT_WORKSPACE
-        ? 'The default workspace can’t be deleted'
-        : `Delete the workspace “${current}”`}
-      disabled={busy || current === DEFAULT_WORKSPACE}
-      onclick={() => removing?.showModal()}>Delete…</button
+      aria-label="Workspace actions"
+      aria-haspopup="menu"
+      title="Workspace actions"
+      disabled={busy}
+      onclick={openMenu}>⋯</button
     >
   </div>
 </div>
+<input
+  bind:this={picker}
+  type="file"
+  accept=".zip,application/zip"
+  hidden
+  aria-label="Import .zip"
+  onchange={picked}
+/>
 
-<dialog bind:this={creating} aria-labelledby="new-workspace-title">
-  <form method="dialog" onsubmit={create}>
-    <h2 id="new-workspace-title">New workspace</h2>
-    <label>
-      Name
-      <!-- svelte-ignore a11y_autofocus: the dialog is opened to type this -->
-      <input
-        class="kc-control"
-        bind:value={name}
-        autofocus
-        maxlength={MAX_WORKSPACE_NAME * 2}
-        aria-invalid={tried && nameError !== null}
-        aria-describedby="new-workspace-problem"
-        autocomplete="off"
-        spellcheck="false"
-      />
-    </label>
-    <p id="new-workspace-problem" class="problem" aria-live="polite">
-      {tried || name.trim() !== '' ? (nameError ?? '') : ''}
-    </p>
-    <div class="buttons">
-      <button type="button" class="kc-control" onclick={() => creating?.close()}>Cancel</button>
-      <button type="submit" class="kc-control kc-primary">Create</button>
-    </div>
-  </form>
-</dialog>
-
-<dialog bind:this={removing} aria-labelledby="delete-workspace-title">
-  <form method="dialog" onsubmit={remove}>
-    <h2 id="delete-workspace-title">Delete the workspace “{current}”?</h2>
-    <p>All its files are deleted with it. It can’t be undone.</p>
-    <div class="buttons">
-      <!-- svelte-ignore a11y_autofocus: the safe answer is the one a key press takes -->
-      <button
-        type="button"
-        class="kc-control kc-primary"
-        autofocus
-        onclick={() => removing?.close()}>Cancel</button
-      >
-      <button type="submit" class="kc-control">Delete</button>
-    </div>
-  </form>
-</dialog>
+{#if menu}
+  <ContextMenu {items} at={menu} label="Workspace “{current}”" onclose={() => (menu = null)} />
+{/if}
+{#if naming}
+  <NameDialog
+    title={naming.title}
+    action={naming.action}
+    value={naming.value}
+    {names}
+    onname={named}
+    oncancel={() => (naming = null)}
+  />
+{/if}
+{#if deleting}
+  <AskDialog
+    title="Delete the workspace “{current}”?"
+    text="All its files are deleted with it. It can’t be undone."
+    answers={[
+      { text: 'Cancel', value: 'cancel', primary: true },
+      { text: 'Delete', value: 'delete' },
+    ]}
+    cancel="cancel"
+    onanswer={(answer) => {
+      deleting = false;
+      if (answer === 'delete') onremove(current);
+    }}
+  />
+{/if}
 
 <style>
-  /* New on a row of its own, then the one open and Delete beside it */
+  /* New on a row of its own, then the one open and its menu beside it */
   .workspaces {
     display: flex;
     flex-direction: column;
@@ -153,53 +182,5 @@
   }
   .open button {
     flex: none;
-  }
-  /* As @kupcad/files' AskDialog draws its questions */
-  dialog {
-    width: min(26em, calc(100vw - 32px));
-    margin: auto;
-    padding: 16px;
-    font-family: var(--kc-font);
-    font-size: var(--kc-font-size);
-    color: var(--kc-fg);
-    background: var(--kc-bg);
-    border: 1px solid var(--kc-border);
-    border-radius: var(--kc-radius);
-    box-shadow: 0 12px 32px rgb(0 0 0 / 0.25);
-  }
-  dialog::backdrop {
-    background: rgb(0 0 0 / 0.3);
-  }
-  h2 {
-    margin: 0;
-    font-size: 1.05em;
-    font-weight: 600;
-    overflow-wrap: anywhere;
-  }
-  dialog p {
-    margin: 8px 0 0;
-    color: var(--kc-muted);
-    overflow-wrap: anywhere;
-  }
-  label {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    margin-top: 12px;
-  }
-  .problem {
-    min-height: 1.3em;
-    font-size: 12px;
-  }
-  dialog p.problem {
-    margin-top: 6px;
-    color: var(--kc-error);
-  }
-  .buttons {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: var(--kc-gap);
-    margin-top: 16px;
   }
 </style>

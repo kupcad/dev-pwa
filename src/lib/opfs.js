@@ -1,12 +1,28 @@
 // The project's files in the browser's origin private file system (OPFS): a workspace's folder
 // (workspaces.js), its entries by their paths from its root (`/main.kup`, `/parts/lid.kup`), listed for the tree
-// (`readDir`, as @kupcad/files' listFolder takes it), read, written, made, renamed and removed.
-// A rename is a copy, then the removal of what was copied: no rename is in every browser's OPFS.
+// (`readDir`, as @kupcad/files' listFolder takes it), read, written, made, renamed and removed,
+// and all of them walked (a workspace downloaded, measured). A rename is a copy, then the removal
+// of what was copied: no rename is in every browser's OPFS; `copyFolder` copies a workspace so.
 
 /** @import { DirEntry } from '@kupcad/files' */
 
 /** The names a path has, from the root. @param {string} path */
 const namesOf = (path) => path.split('/').filter((name) => name !== '');
+
+/**
+ * Writes the file `name` in the folder `dir`, made where it isn't.
+ * @param {FileSystemDirectoryHandle} dir
+ * @param {string} name
+ * @param {string | Uint8Array<ArrayBuffer>} data
+ */
+async function writeIn(dir, name, data) {
+  const writable = await (await dir.getFileHandle(name, { create: true })).createWritable();
+  try {
+    await writable.write(data);
+  } finally {
+    await writable.close();
+  }
+}
 
 /**
  * What a project's files are read and written with, under `root` (once it is there, for a
@@ -101,12 +117,7 @@ export function opfsFiles(root) {
      */
     async write(path, data) {
       const { dir, name } = await placeOf(path);
-      const writable = await (await dir.getFileHandle(name, { create: true })).createWritable();
-      try {
-        await writable.write(data);
-      } finally {
-        await writable.close();
-      }
+      await writeIn(dir, name, data);
     },
 
     /** Whether there is a file or a folder at `path`. @param {string} path */
@@ -140,6 +151,34 @@ export function opfsFiles(root) {
       const { dir, name } = await placeOf(path);
       await dir.removeEntry(name, { recursive: true });
     },
+
+    /**
+     * Every folder and file in the project, by their paths without the leading `/` (as a zip
+     * has them), a folder before what is in it; a file with its `File`, which has its size and
+     * time written and reads its bytes.
+     * @returns {Promise<{ path: string, file?: File }[]>}
+     */
+    async walk() {
+      /** @type {{ path: string, file?: File }[]} */
+      const found = [];
+      /** @param {FileSystemDirectoryHandle} dir @param {string} prefix */
+      const walkIn = async (dir, prefix) => {
+        for await (const handle of dir.values()) {
+          const path = prefix + handle.name;
+          if (handle.kind === 'file') {
+            found.push({
+              path,
+              file: await /** @type {FileSystemFileHandle} */ (handle).getFile(),
+            });
+          } else {
+            found.push({ path });
+            await walkIn(/** @type {FileSystemDirectoryHandle} */ (handle), `${path}/`);
+          }
+        }
+      };
+      await walkIn(await ready, '');
+      return found;
+    },
   };
 
   /**
@@ -154,12 +193,29 @@ export function opfsFiles(root) {
       return;
     }
     await files.mkdir(to);
-    for (const child of await files.readDir(from)) {
-      await copy(`${from}/${child.name}`, `${to}/${child.name}`);
-    }
+    await copyFolder(handle, await folder(to));
   }
 
   return files;
+}
+
+/**
+ * Copies what is in the folder `from` into the folder `to`, folders and all.
+ * @param {FileSystemDirectoryHandle} from
+ * @param {FileSystemDirectoryHandle} to
+ */
+export async function copyFolder(from, to) {
+  for await (const handle of from.values()) {
+    if (handle.kind === 'file') {
+      const file = await /** @type {FileSystemFileHandle} */ (handle).getFile();
+      await writeIn(to, handle.name, new Uint8Array(await file.arrayBuffer()));
+    } else {
+      await copyFolder(
+        /** @type {FileSystemDirectoryHandle} */ (handle),
+        await to.getDirectoryHandle(handle.name, { create: true }),
+      );
+    }
+  }
 }
 
 /** @typedef {ReturnType<typeof opfsFiles>} ProjectFiles */

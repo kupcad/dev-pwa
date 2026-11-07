@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { zip } from '../src/lib/zip.js';
 
 /** @import { Page } from '@playwright/test' */
 
@@ -99,16 +100,38 @@ test("keeps each script's own undo history while another is open", async ({ page
   await expect(page.locator('.cm-content')).not.toContainText('# mine');
 });
 
+/**
+ * Chooses `item` from the menu of the workspace open.
+ * @param {Page} page
+ * @param {string} item
+ */
+async function chooseForWorkspace(page, item) {
+  await page.getByRole('button', { name: 'Workspace actions' }).click();
+  await page
+    .getByRole('menu', { name: /^Workspace “/ })
+    .getByRole('menuitem', { name: item })
+    .click();
+}
+
+/** The list of the workspaces, showing the one open. @param {Page} page */
+const picker = (page) => page.getByRole('combobox', { name: 'Workspace' });
+
+/**
+ * The bytes of a download. @param {import('@playwright/test').Download} download
+ */
+async function bytesOf(download) {
+  const chunks = [];
+  for await (const chunk of await download.createReadStream()) chunks.push(chunk);
+  return Buffer.concat(chunks);
+}
+
 test("downloads a file from its row's menu", async ({ page }) => {
   await opened(page);
   const downloading = page.waitForEvent('download');
   await choose(page, '/parts/tray.kup', 'Download');
   const download = await downloading;
   expect(download.suggestedFilename()).toBe('tray.kup');
-  const stream = await download.createReadStream();
-  const chunks = [];
-  for await (const chunk of stream) chunks.push(chunk);
-  expect(Buffer.concat(chunks).toString()).toContain('export tray');
+  expect((await bytesOf(download)).toString()).toContain('export tray');
 });
 
 test("renames and deletes from a row's menu, the script open following", async ({ page }) => {
@@ -277,27 +300,27 @@ test('keeps each workspace a project of its own: made, switched between, and del
   page,
 }) => {
   const errors = await opened(page);
-  const picker = page.getByRole('combobox', { name: 'Workspace' });
-  await expect(picker).toHaveValue('Default');
-  // The default can't be deleted
-  await expect(page.getByRole('button', { name: 'Delete…' })).toBeDisabled();
+  await expect(picker(page)).toHaveValue('Default');
+  // The default can't be deleted: its menu has no Delete…
+  await page.getByRole('button', { name: 'Workspace actions' }).click();
+  const actions = page.getByRole('menu', { name: 'Workspace “Default”' });
+  await expect(actions.getByRole('menuitem', { name: 'Download .zip' })).toBeVisible();
+  await expect(actions.getByRole('menuitem', { name: 'Delete…' })).toHaveCount(0);
+  await page.keyboard.press('Escape');
 
   // A name the workspaces have, in any case, or none, is refused in the dialog
   await page.getByRole('button', { name: 'New workspace…' }).click();
   const making = page.getByRole('dialog', { name: 'New workspace' });
-  await making.getByRole('button', { name: 'Create' }).click();
-  await expect(making).toContainText('Give the workspace a name.');
+  await expect(making.getByRole('button', { name: 'Create' })).toBeDisabled();
   await making.getByRole('textbox', { name: 'Name' }).fill('default');
   await expect(making).toContainText('There is a workspace “default” already.');
+  await expect(making.getByRole('button', { name: 'Create' })).toBeDisabled();
   await making.getByRole('textbox', { name: 'Name' }).fill('  Shelf ');
   await making.getByRole('button', { name: 'Create' }).click();
   await expect(making).toBeHidden();
 
   // The new one opens empty: only the default is given the starter
-  await expect(picker).toHaveValue('Shelf');
-  await expect(
-    page.getByText('Open a script from the files, or make one with New script.'),
-  ).toBeVisible();
+  await expect(picker(page)).toHaveValue('Shelf');
   await expect(row(page, 'main.kup')).toHaveCount(0);
   await files(page).getByRole('button', { name: 'New script' }).click();
   await files(page).getByRole('textbox', { name: 'New script name' }).fill('shelf');
@@ -306,33 +329,78 @@ test('keeps each workspace a project of its own: made, switched between, and del
   await page.keyboard.type('cube(3)\n');
 
   // The default has its own files: none of Shelf's
-  await picker.selectOption('Default');
+  await picker(page).selectOption('Default');
   await expect(row(page, 'main.kup')).toHaveAttribute('aria-current', 'true', { timeout: RUN_MS });
   await expect(row(page, 'shelf.kup')).toHaveCount(0);
 
   // Back in Shelf after a reload, its script open last is open again, as it was written
-  await picker.selectOption('Shelf');
+  await picker(page).selectOption('Shelf');
   await expect(row(page, 'shelf.kup')).toHaveAttribute('aria-current', 'true', {
     timeout: RUN_MS,
   });
   await page.reload();
-  await expect(picker).toHaveValue('Shelf', { timeout: RUN_MS });
+  await expect(picker(page)).toHaveValue('Shelf', { timeout: RUN_MS });
   await expect(row(page, 'shelf.kup')).toHaveAttribute('aria-current', 'true', {
     timeout: RUN_MS,
   });
   await expect(page.locator('.cm-content')).toContainText('cube(3)');
 
   // Deleting asks first; Cancel keeps it
-  await page.getByRole('button', { name: 'Delete…' }).click();
+  await chooseForWorkspace(page, 'Delete…');
   const deleting = page.getByRole('dialog', { name: 'Delete the workspace “Shelf”?' });
   await deleting.getByRole('button', { name: 'Cancel' }).click();
-  await expect(picker).toHaveValue('Shelf');
-  await page.getByRole('button', { name: 'Delete…' }).click();
+  await expect(picker(page)).toHaveValue('Shelf');
+  await chooseForWorkspace(page, 'Delete…');
   await deleting.getByRole('button', { name: 'Delete' }).click();
-  await expect(picker).toHaveValue('Default');
-  await expect(picker.getByRole('option')).toHaveText(['Default']);
+  await expect(picker(page)).toHaveValue('Default');
+  await expect(picker(page).getByRole('option')).toHaveText(['Default']);
   await expect(row(page, 'main.kup')).toHaveAttribute('aria-current', 'true', { timeout: RUN_MS });
   expect(errors).toEqual([]);
+});
+
+test('downloads a workspace as a zip, and imports it as a new one, its name made new', async ({
+  page,
+}, testInfo) => {
+  const errors = await opened(page);
+  const downloading = page.waitForEvent('download');
+  await chooseForWorkspace(page, 'Download .zip');
+  const download = await downloading;
+  expect(download.suggestedFilename()).toBe('Default.zip');
+  const saved = testInfo.outputPath('Default.zip');
+  await download.saveAs(saved);
+
+  const choosing = page.waitForEvent('filechooser');
+  await chooseForWorkspace(page, 'Import .zip…');
+  await (await choosing).setFiles(saved);
+  const importing = page.getByRole('dialog', { name: 'Import workspace' });
+  await expect(importing.getByRole('textbox', { name: 'Name' })).toHaveValue('Default 2');
+  await importing.getByRole('button', { name: 'Import' }).click();
+  await expect(picker(page)).toHaveValue('Default 2');
+  await expect(row(page, 'main.kup')).toHaveAttribute('aria-current', 'true', { timeout: RUN_MS });
+  await expect(row(page, 'tray.kup')).toBeVisible();
+  await expect(status(page)).toHaveText(/Ready · \d+ ms/, { timeout: RUN_MS });
+  expect(errors).toEqual([]);
+});
+
+test('refuses a zip with a path out of its folder, making no workspace of it', async ({ page }) => {
+  await opened(page);
+  const bad = await zip([{ path: '../escape.kup', data: new TextEncoder().encode('cube(1)') }]);
+  const choosing = page.waitForEvent('filechooser');
+  await chooseForWorkspace(page, 'Import .zip…');
+  await (
+    await choosing
+  ).setFiles({
+    name: 'escape.zip',
+    mimeType: 'application/zip',
+    buffer: Buffer.from(await bad.arrayBuffer()),
+  });
+  await page
+    .getByRole('dialog', { name: 'Import workspace' })
+    .getByRole('button', { name: 'Import' })
+    .click();
+  await expect(files(page).getByRole('alert')).toContainText('leaves its folder');
+  await expect(picker(page).getByRole('option')).toHaveText(['Default']);
+  await expect(picker(page)).toHaveValue('Default');
 });
 
 test('works offline once it has loaded, the core and all', async ({ page, context }) => {
