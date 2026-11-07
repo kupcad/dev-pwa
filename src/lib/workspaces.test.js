@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { memoryFolder } from './memory-opfs.test-helper.js';
 import { opfsFiles } from './opfs.js';
 import {
-  DEFAULT_WORKSPACE,
+  FIRST_WORKSPACE,
   hashOf,
   MAX_WORKSPACE_NAME,
   uniqueWorkspaceName,
@@ -22,39 +22,54 @@ function inMemory() {
 }
 
 describe('the workspaces', () => {
-  it('are the default alone at first, made the first time they are listed', async () => {
+  it('are none at first: listing them makes none', async () => {
     const { root, spaces } = inMemory();
-    expect(await spaces.list()).toEqual([DEFAULT_WORKSPACE]);
+    expect(await spaces.list()).toEqual([]);
     const folder = await root.getDirectoryHandle('workspaces');
-    expect((await folder.getDirectoryHandle(DEFAULT_WORKSPACE)).kind).toBe('directory');
+    expect(await Array.fromAsync(folder.values())).toEqual([]);
   });
 
-  it('list the default first, then the others alphabetically, files at the top left out', async () => {
+  it('are made the first time there is none: the first, with the starter in it', async () => {
+    const { spaces } = inMemory();
+    const starter = { '/main.kup': 'cube(1)\n', '/parts/tray.kup': 'cube(2)\n' };
+    expect(await spaces.listOrMakeFirst(starter)).toEqual([FIRST_WORKSPACE]);
+    expect(await contentOf(spaces, FIRST_WORKSPACE)).toEqual({
+      'main.kup': 'cube(1)\n',
+      parts: null,
+      'parts/tray.kup': 'cube(2)\n',
+    });
+    // Not again, once there is one, whatever it is called and has
+    await spaces.rename(FIRST_WORKSPACE, 'Shelf');
+    await opfsFiles(spaces.folder('Shelf')).remove('/main.kup');
+    expect(await spaces.listOrMakeFirst(starter)).toEqual(['Shelf']);
+  });
+
+  it('list alphabetically, the first one no different, files at the top left out', async () => {
     const { root, spaces } = inMemory();
-    await spaces.create('Shelf');
-    await spaces.create('brackets');
-    await spaces.create('Zeta');
+    for (const name of ['Shelf', 'brackets', FIRST_WORKSPACE, 'Zeta']) await spaces.create(name);
     const folder = await root.getDirectoryHandle('workspaces');
     await folder.getFileHandle('stray.txt', { create: true });
-    expect(await spaces.list()).toEqual([DEFAULT_WORKSPACE, 'brackets', 'Shelf', 'Zeta']);
+    expect(await spaces.list()).toEqual(['brackets', FIRST_WORKSPACE, 'Shelf', 'Zeta']);
   });
 
   it('each keep their files in a folder of their own', async () => {
     const { spaces } = inMemory();
+    await spaces.create('Bins');
     await spaces.create('Shelf');
-    await opfsFiles(spaces.folder(DEFAULT_WORKSPACE)).write('/main.kup', 'cube(1)\n');
+    await opfsFiles(spaces.folder('Bins')).write('/main.kup', 'cube(1)\n');
     await opfsFiles(spaces.folder('Shelf')).write('/main.kup', 'cube(2)\n');
-    expect(await opfsFiles(spaces.folder(DEFAULT_WORKSPACE)).read('/main.kup')).toBe('cube(1)\n');
+    expect(await opfsFiles(spaces.folder('Bins')).read('/main.kup')).toBe('cube(1)\n');
     expect(await opfsFiles(spaces.folder('Shelf')).read('/main.kup')).toBe('cube(2)\n');
     // The same folder each time
     expect(await spaces.folder('Shelf')).toBe(await spaces.folder('Shelf'));
   });
 
-  it("open the default's folder the first time, but never make another's", async () => {
+  it('find a folder, but never make one, the first one’s neither', async () => {
     const { spaces } = inMemory();
-    expect((await spaces.folder(DEFAULT_WORKSPACE)).name).toBe(DEFAULT_WORKSPACE);
-    await expect(spaces.folder('Gone')).rejects.toMatchObject({ name: 'NotFoundError' });
-    expect(await spaces.list()).toEqual([DEFAULT_WORKSPACE]);
+    for (const name of ['Gone', FIRST_WORKSPACE]) {
+      await expect(spaces.folder(name)).rejects.toMatchObject({ name: 'NotFoundError' });
+    }
+    expect(await spaces.list()).toEqual([]);
   });
 
   it('are made with their name trimmed, and refused as a name is', async () => {
@@ -62,26 +77,28 @@ describe('the workspaces', () => {
     expect(await spaces.create('  Shelf  ')).toBe('Shelf');
     await expect(spaces.create('shelf')).rejects.toThrow('There is a workspace “shelf” already.');
     await expect(spaces.create('a/b')).rejects.toThrow('/');
-    expect(await spaces.list()).toEqual([DEFAULT_WORKSPACE, 'Shelf']);
+    expect(await spaces.list()).toEqual(['Shelf']);
   });
 
-  it('are deleted with all their files, but the default never', async () => {
+  it('are deleted with all their files, the first one too, but never the last', async () => {
     const { spaces } = inMemory();
+    await spaces.create(FIRST_WORKSPACE);
     await spaces.create('Shelf');
     const shelf = opfsFiles(spaces.folder('Shelf'));
     await shelf.mkdir('/parts');
     await shelf.write('/parts/lid.kup', 'cube(1)\n');
-    await spaces.remove('Shelf');
-    expect(await spaces.list()).toEqual([DEFAULT_WORKSPACE]);
-    await expect(spaces.remove(DEFAULT_WORKSPACE)).rejects.toThrow('can’t be deleted');
-    expect(await spaces.list()).toEqual([DEFAULT_WORKSPACE]);
+    await spaces.remove(FIRST_WORKSPACE);
+    expect(await spaces.list()).toEqual(['Shelf']);
+    await expect(spaces.remove('Shelf')).rejects.toThrow('The last workspace can’t be deleted.');
+    expect(await spaces.list()).toEqual(['Shelf']);
+    expect(await shelf.read('/parts/lid.kup')).toBe('cube(1)\n');
   });
 
   it("fail each call as getting the origin's file system did", async () => {
     const denied = new DOMException('No storage here', 'SecurityError');
     const spaces = workspaces({ getDirectory: () => Promise.reject(denied) });
     await expect(spaces.list()).rejects.toBe(denied);
-    await expect(opfsFiles(spaces.folder(DEFAULT_WORKSPACE)).readDir('/')).rejects.toBe(denied);
+    await expect(opfsFiles(spaces.folder(FIRST_WORKSPACE)).readDir('/')).rejects.toBe(denied);
   });
 });
 
@@ -100,6 +117,7 @@ async function contentOf(spaces, name) {
 /** A workspace `Shelf` with a script, and one in a folder. */
 async function withShelf() {
   const made = inMemory();
+  await made.spaces.create(FIRST_WORKSPACE);
   await made.spaces.create('Shelf');
   const shelf = opfsFiles(made.spaces.folder('Shelf'));
   await shelf.mkdir('/parts/empty');
@@ -125,22 +143,23 @@ describe('a workspace', () => {
     await expect(spaces.duplicate('Shelf', 'shelf')).rejects.toThrow('already');
   });
 
-  it('is renamed with its files, in its case alone too, but the default never', async () => {
+  it('is renamed with its files, in its case alone too, the first one as any other', async () => {
     const { spaces } = await withShelf();
     expect(await spaces.rename('Shelf', 'Bins')).toBe('Bins');
-    expect(await spaces.list()).toEqual([DEFAULT_WORKSPACE, 'Bins']);
+    expect(await spaces.list()).toEqual(['Bins', FIRST_WORKSPACE]);
     expect(await contentOf(spaces, 'Bins')).toEqual(SHELF);
     expect(await spaces.rename('Bins', 'BINS')).toBe('BINS');
-    expect(await spaces.list()).toEqual([DEFAULT_WORKSPACE, 'BINS']);
+    expect(await spaces.list()).toEqual(['BINS', FIRST_WORKSPACE]);
     expect(await contentOf(spaces, 'BINS')).toEqual(SHELF);
     await expect(spaces.rename('BINS', 'default')).rejects.toThrow('already');
-    await expect(spaces.rename(DEFAULT_WORKSPACE, 'Main')).rejects.toThrow('can’t be renamed');
+    expect(await spaces.rename(FIRST_WORKSPACE, 'Main')).toBe('Main');
+    expect(await spaces.list()).toEqual(['BINS', 'Main']);
   });
 
   it('is measured: its files, not its folders, and their bytes', async () => {
     const { spaces } = await withShelf();
     expect(await spaces.size('Shelf')).toEqual({ files: 2, bytes: 16 });
-    expect(await spaces.size(DEFAULT_WORKSPACE)).toEqual({ files: 0, bytes: 0 });
+    expect(await spaces.size(FIRST_WORKSPACE)).toEqual({ files: 0, bytes: 0 });
   });
 
   it('is zipped in a folder named for it, and imported from that zip as it was', async () => {
@@ -179,7 +198,7 @@ describe('a workspace', () => {
       'leaves its folder',
     );
     await expect(spaces.fromZip('a/b', new Uint8Array())).rejects.toThrow('/');
-    expect(await spaces.list()).toEqual([DEFAULT_WORKSPACE]);
+    expect(await spaces.list()).toEqual([]);
   });
 });
 
@@ -215,7 +234,7 @@ describe("a workspace's name made new", () => {
     ['a/b\\c', 'a b c'],
     ['x'.repeat(MAX_WORKSPACE_NAME + 5), 'x'.repeat(MAX_WORKSPACE_NAME)],
   ])('%j: %j', (base, name) => {
-    expect(uniqueWorkspaceName(base, [DEFAULT_WORKSPACE, 'Shelf', 'Shelf 3'])).toBe(name);
+    expect(uniqueWorkspaceName(base, [FIRST_WORKSPACE, 'Shelf', 'Shelf 3'])).toBe(name);
   });
 
   it('is shortened to leave room for its number', () => {
@@ -236,7 +255,7 @@ describe("the page's hash", () => {
 });
 
 describe("a new workspace's name", () => {
-  const existing = [DEFAULT_WORKSPACE, 'Shelf'];
+  const existing = [FIRST_WORKSPACE, 'Shelf'];
 
   it.each([
     ['Brackets', null],

@@ -5,12 +5,12 @@ import Workspaces from './Workspaces.svelte';
 afterEach(() => document.body.replaceChildren());
 
 /**
- * The workspaces' bar, Shelf open (or the one given), its callbacks mocked.
+ * The workspaces' bar, Shelf open (or the one given) of `names`, its callbacks mocked.
  * @param {string} [current]
  */
-function bar(current = 'Shelf') {
+function bar(current = 'Shelf', names = ['Default', 'Shelf', 'Shelf copy']) {
   const props = {
-    names: ['Default', 'Shelf', 'Shelf copy'],
+    names,
     current,
     onswitch: vi.fn(),
     oncreate: vi.fn(),
@@ -57,9 +57,19 @@ describe('the workspaces’ bar', () => {
     ]);
   });
 
-  it('offers no Rename… or Delete… of the default', async () => {
-    bar('Default');
+  it('offers Default all another is offered: it is no different', async () => {
+    const { onrename } = bar('Default');
+    expect((await menuItems()).map((item) => item.textContent?.trim())).toContain('Delete…');
+    await choose('Rename…');
+    await fireEvent.input(nameField(), { target: { value: 'Main' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
+    expect(onrename.mock.calls).toEqual([['Default', 'Main']]);
+  });
+
+  it('offers no Delete… of the last workspace', async () => {
+    bar('Shelf', ['Shelf']);
     expect((await menuItems()).map((item) => item.textContent?.trim())).toEqual([
+      'Rename…',
       'Duplicate…',
       'Download .zip',
       'Import .zip…',

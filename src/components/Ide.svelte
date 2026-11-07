@@ -1,13 +1,14 @@
 <!--
   @component
   The IDE: a project's files beside the playground, all in the browser. The project (@kupcad/files'
-  Project) is a workspace's folder of the browser's private file system (opfs.js, workspaces.js),
-  the default given a starter while it is empty (project.js). The workspaces are above the files
+  Project) is a workspace's folder of the browser's private file system (opfs.js, workspaces.js);
+  where there is none (a first visit), the first is made, Default, with the example in it
+  (project.js' starter). The workspaces are above the files
   (Workspaces): one picked opens its own project (the one open saved first), New workspace… makes
   one, empty, and opens it, Download .zip saves the one open as a zip, Import .zip… makes one of a
   zip and opens it, Rename… and Duplicate… rename and copy the one open (each a copy: OPFS has no
-  rename) and open it, and Delete… deletes the one open with its files, the default left open; each
-  opens the file it had open last. The URL names the workspace open (#w=…; changed, it opens the
+  rename) and open it, and Delete… deletes the one open with its files while another is left, the
+  first in the list opened; each opens the file it had open last. The URL names the workspace open (#w=…; changed, it opens the
   one it names), and the tabs tell each other of their changes to the workspaces (a
   BroadcastChannel), which they follow at once. An empty workspace offers a script, an upload and the
   example in place of the playground; under the files, the storage used is said. A file or a
@@ -46,7 +47,7 @@
   import { onMount, tick } from 'svelte';
   import { opfsFiles } from '../lib/opfs.js';
   import { importable, MAIN_SCRIPT, sameFiles, STARTER, stemOf } from '../lib/project.js';
-  import { DEFAULT_WORKSPACE, hashOf, workspaceOfHash, workspaces } from '../lib/workspaces.js';
+  import { FIRST_WORKSPACE, hashOf, workspaceOfHash, workspaces } from '../lib/workspaces.js';
   import { storageUse } from '../lib/storage.js';
   import { transfer } from '../lib/transfer.js';
   import { MAX_ZIP_BYTES } from '../lib/zip.js';
@@ -87,8 +88,8 @@
       keep();
       storageChanged();
     });
-  /** The workspaces there are, the default first. */
-  let workspaceNames = $state.raw([DEFAULT_WORKSPACE]);
+  /** The workspaces there are, in alphabetical order (none until they are listed). */
+  let workspaceNames = $state.raw(/** @type {string[]} */ ([]));
   /** The workspace the page opens first: the one its URL names, else the one open last. */
   const opensFirst = firstWorkspace();
   /** The workspace open: at first `opensFirst`, until the list says it is there. */
@@ -179,10 +180,13 @@
     );
   }
 
-  /** The workspace the page opens first: the one its URL names, else the one open last, else the default. */
+  /**
+   * The workspace the page opens first: the one its URL names, else the one open last, else the
+   * one a first visit makes (`begin` opens the first in the list where it isn't there).
+   */
   function firstWorkspace() {
     const last = settings.get(KEYS.workspace);
-    return workspaceOfHash(location.hash) ?? (typeof last === 'string' ? last : DEFAULT_WORKSPACE);
+    return workspaceOfHash(location.hash) ?? (typeof last === 'string' ? last : FIRST_WORKSPACE);
   }
 
   /** The file the workspace open had open last, by its path, or null. */
@@ -226,10 +230,13 @@
     return run;
   }
 
-  /** Lists the workspaces again; whether they were (else it says so). */
+  /**
+   * Lists the workspaces again (where there is none, the first is made, with the example in it);
+   * whether they were (else it says so).
+   */
   async function relist() {
     try {
-      workspaceNames = await spaces.list();
+      workspaceNames = await spaces.listOrMakeFirst(STARTER);
       return true;
     } catch (error) {
       problem = `The workspaces weren't listed: ${errorText(error)}`;
@@ -250,14 +257,13 @@
   }
 
   /**
-   * Lists the workspaces, then opens the one the URL names, else the one open last (the default
-   * where it's gone).
+   * Lists the workspaces, then opens the one the URL names, else the one open last (the first in
+   * the list where it's gone): its folder found now that it is listed.
    */
   function begin() {
     return serially(async () => {
       if (!(await relist())) return;
-      if (!workspaceNames.includes(workspace)) leaveFor(DEFAULT_WORKSPACE);
-      showInHash();
+      leaveFor(workspaceNames.includes(workspace) ? workspace : workspaceNames[0]);
       await start();
     });
   }
@@ -367,21 +373,22 @@
     }, `${file.name} wasn't imported`);
 
   /**
-   * Deletes the workspace `name` (the one open) with its files, and opens the default.
+   * Deletes the workspace `name` (the one open) with its files, while another is left, and opens
+   * the first of those left.
    * @param {string} name
    */
   const removeWorkspace = (name) =>
     serially(async () => {
-      if (name === DEFAULT_WORKSPACE) return;
-      leaveFor(DEFAULT_WORKSPACE);
       try {
         await spaces.remove(name);
         keepOpen(null, name);
         announce({ kind: 'deleted', name });
       } catch (error) {
         problem = `The workspace “${name}” wasn't deleted: ${errorText(error)}`;
+        return;
       }
-      await relist();
+      if (!(await relist())) return;
+      leaveFor(workspaceNames[0]);
       await start();
     });
 
@@ -428,7 +435,7 @@
 
   /**
    * Another tab changed the workspaces: they are listed again, and the one open follows a
-   * change to it (deleted: the default opened; renamed: opened by its new name; its files
+   * change to it (deleted: the first in the list opened; renamed: opened by its new name; its files
    * changed: read again).
    * @param {Change} change
    */
@@ -443,7 +450,7 @@
         await followRename(change.to);
       } else if (!workspaceNames.includes(workspace)) {
         problem = `The workspace “${workspace}” was deleted in another tab.`;
-        leaveFor(DEFAULT_WORKSPACE);
+        leaveFor(workspaceNames[0]);
         await start();
       }
     });
@@ -462,18 +469,10 @@
     });
 
   /**
-   * Opens the workspace's project, and the file open last (else its main script, else its
-   * first). The default is given the starter, as an example, while it is empty (the first time,
-   * or everything deleted); another starts as it was made, empty.
+   * Opens the workspace's project, as it is (an empty one offers the example), and the file open
+   * last (else its main script, else its first).
    */
   async function start() {
-    try {
-      const empty = (await fs.readDir(ROOT)).length === 0;
-      if (empty && workspace === DEFAULT_WORKSPACE) await writeExample();
-    } catch (error) {
-      problem = `The project wasn't opened: ${errorText(error)}`;
-      return;
-    }
     await listNow();
     storageChanged();
     const opened = project.entries.filter((entry) => languageOf(entry.name) !== null);
@@ -656,7 +655,7 @@
 
   /**
    * Reads the workspaces and the project again, as another tab may have changed them: the
-   * workspace open, deleted there, is left for the default.
+   * workspace open, deleted there, is left for the first in the list.
    */
   async function readAgain() {
     if (busy) return;

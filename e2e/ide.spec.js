@@ -296,12 +296,12 @@ test("takes another tab's change to the JSON file open as JSON still, nothing ru
   await expect(page.getByRole('list', { name: 'Parts' })).toHaveCount(0);
 });
 
-test('keeps each workspace a project of its own: made, switched between, and deleted, the default kept', async ({
+test('keeps each workspace a project of its own: made, switched between, and deleted, the last kept', async ({
   page,
 }) => {
   const errors = await opened(page);
   await expect(picker(page)).toHaveValue('Default');
-  // The default can't be deleted: its menu has no Delete…
+  // The last workspace can't be deleted: its menu has no Delete…
   await page.getByRole('button', { name: 'Workspace actions' }).click();
   const actions = page.getByRole('menu', { name: 'Workspace “Default”' });
   await expect(actions.getByRole('menuitem', { name: 'Download .zip' })).toBeVisible();
@@ -319,7 +319,7 @@ test('keeps each workspace a project of its own: made, switched between, and del
   await making.getByRole('button', { name: 'Create' }).click();
   await expect(making).toBeHidden();
 
-  // The new one opens empty: only the default is given the starter
+  // The new one opens empty: only the first visit's is given the starter
   await expect(picker(page)).toHaveValue('Shelf');
   await expect(row(page, 'main.kup')).toHaveCount(0);
   await files(page).getByRole('button', { name: 'New script' }).click();
@@ -328,7 +328,7 @@ test('keeps each workspace a project of its own: made, switched between, and del
   await expect(row(page, 'shelf.kup')).toHaveAttribute('aria-current', 'true');
   await page.keyboard.type('cube(3)\n');
 
-  // The default has its own files: none of Shelf's
+  // Default has its own files: none of Shelf's
   await picker(page).selectOption('Default');
   await expect(row(page, 'main.kup')).toHaveAttribute('aria-current', 'true', { timeout: RUN_MS });
   await expect(row(page, 'shelf.kup')).toHaveCount(0);
@@ -382,14 +382,6 @@ test('renames the workspace open, in its case alone too, and duplicates it, its 
   page,
 }) => {
   const errors = await opened(page);
-  // The default can't be renamed
-  await page.getByRole('button', { name: 'Workspace actions' }).click();
-  await expect(
-    page
-      .getByRole('menu', { name: 'Workspace “Default”' })
-      .getByRole('menuitem', { name: 'Rename…' }),
-  ).toHaveCount(0);
-  await page.keyboard.press('Escape');
   await newWorkspace(page, 'Shelf', 'cube(3)\n');
 
   // Renamed with what was typed and not yet saved, the script open still open
@@ -402,21 +394,21 @@ test('renames the workspace open, in its case alone too, and duplicates it, its 
   await name.fill('Bins');
   await renaming.getByRole('button', { name: 'Rename' }).click();
   await expect(picker(page)).toHaveValue('Bins');
-  await expect(picker(page).getByRole('option')).toHaveText(['Default', 'Bins']);
+  await expect(picker(page).getByRole('option')).toHaveText(['Bins', 'Default']);
   await expect(row(page, 'shelf.kup')).toHaveAttribute('aria-current', 'true');
   await expect(page.locator('.cm-content')).toContainText('cube(3)');
 
   await chooseForWorkspace(page, 'Rename…');
   await name.fill('BINS');
   await renaming.getByRole('button', { name: 'Rename' }).click();
-  await expect(picker(page).getByRole('option')).toHaveText(['Default', 'BINS']);
+  await expect(picker(page).getByRole('option')).toHaveText(['BINS', 'Default']);
 
   await chooseForWorkspace(page, 'Duplicate…');
   const duplicating = page.getByRole('dialog', { name: 'Duplicate workspace' });
   await expect(duplicating.getByRole('textbox', { name: 'Name' })).toHaveValue('BINS copy');
   await duplicating.getByRole('button', { name: 'Duplicate' }).click();
   await expect(picker(page)).toHaveValue('BINS copy');
-  await expect(picker(page).getByRole('option')).toHaveText(['Default', 'BINS', 'BINS copy']);
+  await expect(picker(page).getByRole('option')).toHaveText(['BINS', 'BINS copy', 'Default']);
   await expect(row(page, 'shelf.kup')).toHaveAttribute('aria-current', 'true');
   await expect(page.locator('.cm-content')).toContainText('cube(3)');
   expect(errors).toEqual([]);
@@ -451,7 +443,7 @@ test('keeps the workspace open in the URL: opened by it, and each tab in its own
   });
   await expect(picker(other)).toHaveValue('Default');
   await expect(picker(page)).toHaveValue('Shelf 1');
-  // One it doesn't have is the default's, the URL put right
+  // One it doesn't have opens the first in the list, the URL put right
   await other.goto('/#w=Gone');
   await expect(picker(other)).toHaveValue('Default', { timeout: RUN_MS });
   await expect(other).toHaveURL(/#w=Default$/);
@@ -470,7 +462,7 @@ test("follows another tab's changes to the workspaces at once: made, renamed, de
   });
 
   await newWorkspace(page, 'Bins', 'cube(4)\n');
-  await expect(picker(other).getByRole('option')).toHaveText(['Default', 'Bins']);
+  await expect(picker(other).getByRole('option')).toHaveText(['Bins', 'Default']);
   await picker(other).selectOption('Bins');
   await expect(row(other, 'bins.kup')).toHaveAttribute('aria-current', 'true', {
     timeout: RUN_MS,
@@ -495,6 +487,14 @@ test("follows another tab's changes to the workspaces at once: made, renamed, de
   await expect(files(other).getByRole('alert')).toContainText(
     'The workspace “Crates” was deleted in another tab.',
   );
+
+  // Default, renamed, is followed as any other is
+  await expect(picker(page)).toHaveValue('Default');
+  await chooseForWorkspace(page, 'Rename…');
+  await renaming.getByRole('textbox', { name: 'Name' }).fill('Home');
+  await renaming.getByRole('button', { name: 'Rename' }).click();
+  await expect(picker(other)).toHaveValue('Home');
+  await expect(picker(other).getByRole('option')).toHaveText(['Home']);
 });
 
 test('offers an empty workspace a script, an upload or the example; deleting says what is lost', async ({
@@ -585,6 +585,50 @@ test('moves and copies a file to another workspace, a tab with it open seeing it
   await expect(row(other, 'main 2.kup')).toBeVisible();
   await expect(row(other, 'main.kup')).toBeVisible();
   await expect(row(page, 'main.kup')).toHaveAttribute('aria-current', 'true');
+  expect(errors).toEqual([]);
+});
+
+test('makes Default only on a first visit: renamed, then deleted, it never comes back', async ({
+  page,
+}) => {
+  const errors = await opened(page);
+  await chooseForWorkspace(page, 'Rename…');
+  const renaming = page.getByRole('dialog', { name: 'Rename workspace' });
+  await renaming.getByRole('textbox', { name: 'Name' }).fill('Main');
+  await renaming.getByRole('button', { name: 'Rename' }).click();
+  await expect(picker(page)).toHaveValue('Main');
+  await expect(row(page, 'main.kup')).toHaveAttribute('aria-current', 'true', { timeout: RUN_MS });
+
+  await page.getByRole('button', { name: 'New workspace…' }).click();
+  const making = page.getByRole('dialog', { name: 'New workspace' });
+  await making.getByRole('textbox', { name: 'Name' }).fill('Other');
+  await making.getByRole('button', { name: 'Create' }).click();
+  await expect(picker(page)).toHaveValue('Other');
+  await picker(page).selectOption('Main');
+  await expect(row(page, 'main.kup')).toHaveAttribute('aria-current', 'true', { timeout: RUN_MS });
+  await chooseForWorkspace(page, 'Delete…');
+  await page
+    .getByRole('dialog', { name: 'Delete the workspace “Main”?' })
+    .getByRole('button', { name: 'Delete' })
+    .click();
+
+  // The one left opens, as it was: empty, no Default made, no starter written
+  const empty = page.getByRole('group', { name: 'This workspace is empty.' });
+  for (let reloaded = 0; reloaded < 2; reloaded += 1) {
+    await expect(picker(page)).toHaveValue('Other', { timeout: RUN_MS });
+    await expect(picker(page).getByRole('option')).toHaveText(['Other']);
+    await expect(empty).toBeVisible();
+    await expect(row(page, 'main.kup')).toHaveCount(0);
+    if (reloaded === 0) await page.reload();
+  }
+  // The last can't be deleted
+  await page.getByRole('button', { name: 'Workspace actions' }).click();
+  await expect(
+    page
+      .getByRole('menu', { name: 'Workspace “Other”' })
+      .getByRole('menuitem', { name: 'Delete…' }),
+  ).toHaveCount(0);
+  await page.keyboard.press('Escape');
   expect(errors).toEqual([]);
 });
 

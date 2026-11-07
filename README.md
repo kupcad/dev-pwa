@@ -10,9 +10,11 @@ app works offline, and a browser can install it (a PWA). An Astro site of one pa
 
 * **Workspaces** (`src/components/Workspaces.svelte`, `src/lib/workspaces.js`): projects of their
   own, each a folder of the origin's private file system under `workspaces/` (OPFS has no
-  namespaces). `Default` is always there and can't be deleted. New workspace… asks a name in a
-  dialog (`NameDialog.svelte`: not empty, at most 64 characters, no `/` or `\`, not one there is
-  in any case) and opens the new one, empty: only `Default` is given the starter, as an example.
+  namespaces), listed alphabetically. None is special: where there is none (a first visit, or
+  storage cleared), one is made, `Default`, with the starter in it, as an example; that is the
+  only time the starter is written by itself. New workspace… asks a name in a dialog
+  (`NameDialog.svelte`: not empty, at most 64 characters, no `/` or `\`, not one there is in any
+  case) and opens the new one, empty.
   An empty workspace offers New script, Upload files… and Add the example (the starter, its
   `main.kup` opened).
   Where there is another workspace, a row's menu in the tree has Copy to workspace… and Move to
@@ -22,7 +24,7 @@ app works offline, and a browser can install it (a PWA). An Astro site of one pa
   removes it here once copied, the workspace saved first. A tab with that workspace open sees it
   at once.
   Picking one in the list saves the one open and opens it, on the file it had open last. The ⋯
-  menu beside the list has the rest. Rename… (not `Default`) and Duplicate… (named `<name> copy`)
+  menu beside the list has the rest. Rename… and Duplicate… (named `<name> copy`)
   copy the one open's folder (OPFS has no rename; a rename in its case alone goes by a name of its
   own between, as a file system that ignores case would take the copy for the folder itself),
   save it first and open the result on the file it had open. Download .zip saves the one open as a zip of its files in a
@@ -31,17 +33,18 @@ app works offline, and a browser can install it (a PWA). An Astro site of one pa
   added where the name is taken), its files with or without a folder of their own around them.
   A zip is refused where a path leaves its folder (`..`, absolute, a `\`), a file's CRC is wrong,
   or it holds more than 10 000 files or 256 MB. Delete… deletes the one open with its files, once
-  a dialog confirms it (saying how many files and bytes that is), and opens `Default`. The URL names the workspace open (`#w=<name>`,
+  a dialog confirms it (saying how many files and bytes that is), and opens the first in the list;
+  the last workspace can't be deleted (its menu has no Delete…). The URL names the workspace open (`#w=<name>`,
   URI-encoded, replaced, not added to the history): a page opens the one it names (else the one
-  open last, else `Default`), and opens another as the person changes it, so two tabs can work in
+  open last, else the first in the list), and opens another as the person changes it, so two tabs can work in
   two workspaces. A tab tells the others of a workspace made, renamed or deleted
   (`BroadcastChannel('kupcad-workspaces')`): they list them again at once, and one that has it
   open follows it (renamed: opened by its new name, what wasn't saved yet saved there; deleted:
-  `Default` opened, which says so). The page coming back to the front lists them again too, for a
+  the first in the list opened, which says so). The page coming back to the front lists them again too, for a
   browser that says nothing.
 * **The project** (`@kupcad/files`' `Project` over `src/lib/opfs.js`): the workspace open's folder,
-  `Default`'s given a starter while it is empty (`src/lib/project.js`: `main.kup`
-  importing `parts/tray.kup`). The tree makes scripts and folders (its bar, a row's menu), renames
+  the first visit's given the starter (`src/lib/project.js`: `main.kup` importing
+  `parts/tray.kup`). The tree makes scripts and folders (its bar, a row's menu), renames
   and deletes them, takes files into a folder (dropped on its row from the system's file manager, or
   Upload Files…: scripts and the files scripts read; a name the folder has asked about, Replace,
   Rename to the next free name or Cancel) and downloads a file (Download), each from a row's

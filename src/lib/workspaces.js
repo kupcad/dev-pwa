@@ -1,6 +1,7 @@
 // The IDE's workspaces: projects of their own, each a folder of the browser's private file system
-// under `workspaces/` (OPFS has no namespaces of its own), its name the folder's. The default one
-// is always there and can't be deleted; the others are made, and deleted with all their files.
+// under `workspaces/` (OPFS has no namespaces of its own), its name the folder's. None is special:
+// the first visit makes one, `Default`, with the example in it (as one does where all were
+// cleared), and any is renamed, or deleted with all its files while another is left.
 // Each is renamed and duplicated by copying its folder (OPFS has no rename).
 // Each is downloaded as a zip of its files in a folder named for it, and a zip is imported as a
 // new one, its files with or without such a folder.
@@ -12,8 +13,8 @@ import { unzip, zip } from './zip.js';
 
 /** The folder of the origin's private file system the workspaces are in. */
 const WORKSPACES_FOLDER = 'workspaces';
-/** The workspace there always is: the one a first visit opens, and the one left when another goes. */
-export const DEFAULT_WORKSPACE = 'Default';
+/** The name of the workspace a first visit makes (where there is none), with the example in it. */
+export const FIRST_WORKSPACE = 'Default';
 /** The longest name a workspace may have, in characters. */
 export const MAX_WORKSPACE_NAME = 64;
 
@@ -131,31 +132,44 @@ export function workspaces(storage = navigator.storage) {
 
   return {
     /**
-     * The workspaces' names: the default first (made if it isn't there), then the others in
-     * alphabetical order.
+     * The workspaces' names, in alphabetical order.
      * @returns {Promise<string[]>}
      */
     async list() {
-      const folder = await root();
-      await folder.getDirectoryHandle(DEFAULT_WORKSPACE, { create: true });
       /** @type {string[]} */
-      const others = [];
-      for await (const handle of folder.values()) {
-        if (handle.kind === 'directory' && handle.name !== DEFAULT_WORKSPACE) {
-          others.push(handle.name);
-        }
+      const names = [];
+      for await (const handle of (await root()).values()) {
+        if (handle.kind === 'directory') names.push(handle.name);
       }
-      others.sort((a, b) => a.localeCompare(b));
-      return [DEFAULT_WORKSPACE, ...others];
+      return names.toSorted((a, b) => a.localeCompare(b));
     },
 
     /**
-     * The folder of the workspace `name`: the default's made the first time, another's only
-     * found (one deleted in another tab isn't made again by opening it).
+     * The workspaces' names, as `list` gives them; where there is none (a first visit, or all
+     * cleared), the first is made, `FIRST_WORKSPACE`, with `starter`'s files in it.
+     * @param {Record<string, string>} starter the files, by their paths (`/parts/tray.kup`)
+     * @returns {Promise<string[]>}
+     */
+    async listOrMakeFirst(starter) {
+      const names = await this.list();
+      if (names.length > 0) return names;
+      await made(FIRST_WORKSPACE, async (folder) => {
+        const files = opfsFiles(folder);
+        for (const [path, text] of Object.entries(starter)) {
+          await files.mkdir(path.split('/').slice(0, -1).join('/'));
+          await files.write(path, text);
+        }
+      });
+      return this.list();
+    },
+
+    /**
+     * The folder of the workspace `name`, found, never made (one deleted in another tab isn't
+     * made again by opening it).
      * @param {string} name
      */
     async folder(name) {
-      return (await root()).getDirectoryHandle(name, { create: name === DEFAULT_WORKSPACE });
+      return (await root()).getDirectoryHandle(name);
     },
 
     /**
@@ -196,14 +210,13 @@ export function workspaces(storage = navigator.storage) {
     },
 
     /**
-     * Renames the workspace `from` to `to`, the default never; its own name, in another case,
-     * is one it may be given.
+     * Renames the workspace `from` to `to`; its own name, in another case, is one it may be
+     * given.
      * @param {string} from
      * @param {string} to
      * @returns {Promise<string>} the name it was given
      */
     async rename(from, to) {
-      if (from === DEFAULT_WORKSPACE) throw new Error('The default workspace can’t be renamed.');
       const trimmed = await this.newName(to, from);
       if (trimmed === from) return from;
       if (trimmed.toLowerCase() === from.toLowerCase()) {
@@ -276,11 +289,13 @@ export function workspaces(storage = navigator.storage) {
     },
 
     /**
-     * Deletes the workspace `name` and all its files; the default can't be.
+     * Deletes the workspace `name` and all its files, while another is left: the last can't be.
      * @param {string} name
      */
     async remove(name) {
-      if (name === DEFAULT_WORKSPACE) throw new Error('The default workspace can’t be deleted.');
+      if ((await this.list()).every((other) => other === name)) {
+        throw new Error('The last workspace can’t be deleted.');
+      }
       await (await root()).removeEntry(name, { recursive: true });
     },
   };

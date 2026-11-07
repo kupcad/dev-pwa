@@ -5,12 +5,12 @@
   Import .zip… (a zip picked becomes a new workspace) and Delete…. A name is asked in a dialog
   (NameDialog, refused as workspaces.js refuses one; a rename may keep its own name, in another
   case too); deleting asks first (@kupcad/files' AskDialog), saying what is lost (its files
-  counted as it asks). The default
-  can't be renamed or deleted: its menu has neither.
+  counted as it asks). The last workspace can't
+  be deleted: its menu has no Delete….
 -->
 <script>
   import { AskDialog, ContextMenu } from '@kupcad/files';
-  import { DEFAULT_WORKSPACE, uniqueWorkspaceName } from '../lib/workspaces.js';
+  import { uniqueWorkspaceName } from '../lib/workspaces.js';
   import { stemOf } from '../lib/project.js';
   import { formatBytes } from '../lib/storage.js';
   import NameDialog from './NameDialog.svelte';
@@ -19,7 +19,7 @@
 
   /**
    * @typedef {object} Props
-   * @property {string[]} names the workspaces, the default first
+   * @property {string[]} names the workspaces, in alphabetical order
    * @property {string} current the one open
    * @property {boolean} [busy] one being opened, made or deleted: nothing else is asked meanwhile
    * @property {(name: string) => void} onswitch the person picked another
@@ -64,18 +64,16 @@
   let menu = $state.raw(/** @type {{ x: number, y: number } | null} */ (null));
   let picker = $state(/** @type {HTMLInputElement | undefined} */ (undefined));
 
-  /** The menu of the one open: the default's has nothing that would rename or delete it. */
+  /** The menu of the one open: Delete… only while another is left (the last can't be deleted). */
   const items = $derived.by(() => {
-    const own = current !== DEFAULT_WORKSPACE;
     /** @type {MenuItem[]} */
-    const all = [];
-    if (own) all.push({ text: 'Rename…', action: startRename });
-    all.push(
+    const all = [
+      { text: 'Rename…', action: startRename },
       { text: 'Duplicate…', action: startDuplicate },
       { text: 'Download .zip', action: () => ondownload(current) },
       { text: 'Import .zip…', action: () => picker?.click() },
-    );
-    if (own) all.push('-', { text: 'Delete…', action: startDelete });
+    ];
+    if (names.length > 1) all.push('-', { text: 'Delete…', action: startDelete });
     return all;
   });
 
