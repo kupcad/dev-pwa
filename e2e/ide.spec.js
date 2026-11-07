@@ -543,6 +543,13 @@ test('moves and copies a file to another workspace, a tab with it open seeing it
   context,
 }) => {
   const errors = await opened(page);
+  // With no other workspace, a row's menu doesn't offer to take it to one
+  await files(page).getByTitle('/main.kup', { exact: true }).click({ button: 'right' });
+  const alone = page.getByRole('menu', { name: 'main.kup' });
+  await expect(alone.getByRole('menuitem', { name: 'Rename…' })).toBeVisible();
+  await expect(alone.getByRole('menuitem', { name: /to workspace/ })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+
   await page.getByRole('button', { name: 'New workspace…' }).click();
   const making = page.getByRole('dialog', { name: 'New workspace' });
   await making.getByRole('textbox', { name: 'Name' }).fill('Bins');

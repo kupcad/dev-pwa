@@ -3,7 +3,8 @@
   Where a file or a folder of the workspace open is copied or moved to, asked in a modal dialog:
   another workspace (never the one open), picked from a list, and the folder in it, typed (the
   one it is in here, at first; made where it isn't). A folder the tree wouldn't take is said
-  wrong, and the button disabled. With no other workspace, it says to make one first. Escape or
+  wrong, and the button disabled. With no other workspace (another tab deleted the last while it was open: the menu offers it only
+  where there is one), it says to make one first. Escape or
   Cancel closes it with nothing done. Closed either way, it says so (`ontransfer` or `oncancel`),
   for the host to drop it, the focus back where it was.
 -->

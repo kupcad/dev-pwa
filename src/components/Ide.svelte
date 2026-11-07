@@ -804,8 +804,9 @@
       upload: () => upload(project.folderFor(entry, open?.path)),
       download: () => entry && void downloadEntry(entry),
     });
-    if (!entry) return items;
-    // Taken to another workspace: the IDE's own, after what @kupcad/files' menu has
+    // Taken to another workspace: the IDE's own, after what @kupcad/files' menu has, and only
+    // where there is another
+    if (!entry || workspaceNames.length < 2) return items;
     return [
       ...items,
       '-',
