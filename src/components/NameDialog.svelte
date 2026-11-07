@@ -8,6 +8,7 @@
 -->
 <script>
   import { onMount, untrack } from 'svelte';
+  import './dialog.css';
   import { MAX_WORKSPACE_NAME, workspaceNameError } from '../lib/workspaces.js';
 
   /**
@@ -64,6 +65,7 @@
 
 <dialog
   bind:this={dialog}
+  class="ide-dialog"
   aria-labelledby="{id}-title"
   oncancel={(event) => {
     event.preventDefault();
@@ -94,48 +96,3 @@
     </div>
   </form>
 </dialog>
-
-<style>
-  /* As @kupcad/files' AskDialog draws its questions */
-  dialog {
-    width: min(26em, calc(100vw - 32px));
-    margin: auto;
-    padding: 16px;
-    font-family: var(--kc-font);
-    font-size: var(--kc-font-size);
-    color: var(--kc-fg);
-    background: var(--kc-bg);
-    border: 1px solid var(--kc-border);
-    border-radius: var(--kc-radius);
-    box-shadow: 0 12px 32px rgb(0 0 0 / 0.25);
-  }
-  dialog::backdrop {
-    background: rgb(0 0 0 / 0.3);
-  }
-  h2 {
-    margin: 0;
-    font-size: 1.05em;
-    font-weight: 600;
-    overflow-wrap: anywhere;
-  }
-  label {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    margin-top: 12px;
-  }
-  .problem {
-    min-height: 1.3em;
-    margin: 6px 0 0;
-    font-size: 12px;
-    color: var(--kc-error);
-    overflow-wrap: anywhere;
-  }
-  .buttons {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: var(--kc-gap);
-    margin-top: 16px;
-  }
-</style>

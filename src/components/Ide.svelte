@@ -10,7 +10,8 @@
   opens the file it had open last. The URL names the workspace open (#w=…; changed, it opens the
   one it names), and the tabs tell each other of their changes to the workspaces (a
   BroadcastChannel), which they follow at once. An empty workspace offers a script, an upload and the
-  example in place of the playground; under the files, the storage used is said. Its tree (@kupcad/files) makes scripts and folders (its bar, a row's menu),
+  example in place of the playground; under the files, the storage used is said. A file or a
+  folder is copied or moved to another workspace from its row's menu (TransferDialog, transfer.js). Its tree (@kupcad/files) makes scripts and folders (its bar, a row's menu),
   renames and deletes them, takes the person's files into a folder (dropped on it from the
   system's file manager, or uploaded from a row's menu: a name the folder has asked about,
   Replace, Rename or Cancel) and downloads one (a row's menu, a popover). A script clicked opens
@@ -47,7 +48,9 @@
   import { importable, MAIN_SCRIPT, sameFiles, STARTER, stemOf } from '../lib/project.js';
   import { DEFAULT_WORKSPACE, hashOf, workspaceOfHash, workspaces } from '../lib/workspaces.js';
   import { storageUse } from '../lib/storage.js';
+  import { transfer } from '../lib/transfer.js';
   import { MAX_ZIP_BYTES } from '../lib/zip.js';
+  import TransferDialog from './TransferDialog.svelte';
   import Workspaces from './Workspaces.svelte';
 
   /** @import { Clash, Entry, MenuItem } from '@kupcad/files' */
@@ -121,6 +124,8 @@
    * @type {{ title: string, text?: string, answers: { text: string, value: string, primary?: boolean }[], cancel: string, answer: (value: string) => void } | null}
    */
   let question = $state.raw(null);
+  /** The file or folder being copied (or moved) to another workspace, while the person says where. */
+  let transferring = $state.raw(/** @type {{ entry: Entry, move: boolean } | null} */ (null));
   /** What went wrong last, until it is dismissed or something else goes wrong. */
   let problem = $state('');
   /** How many files were asked to open: one read after a later one is asked for isn't shown. */
@@ -791,7 +796,7 @@
    * @returns {MenuItem[]}
    */
   function menuOf(entry) {
-    return rowMenu(entry, {
+    const items = rowMenu(entry, {
       newScript: () => project.startNew('script', project.folderFor(entry, open?.path)),
       newFolder: () => project.startNew('folder', project.folderFor(entry, open?.path)),
       rename: () => entry && project.startRename(entry),
@@ -799,7 +804,64 @@
       upload: () => upload(project.folderFor(entry, open?.path)),
       download: () => entry && void downloadEntry(entry),
     });
+    if (!entry) return items;
+    // Taken to another workspace: the IDE's own, after what @kupcad/files' menu has
+    return [
+      ...items,
+      '-',
+      { text: 'Copy to workspace…', action: () => (transferring = { entry, move: false }) },
+      { text: 'Move to workspace…', action: () => (transferring = { entry, move: true }) },
+    ];
   }
+
+  /**
+   * The person said where the file or folder being copied (or moved) goes: the dialog dropped,
+   * then it is.
+   * @param {string} name
+   * @param {string} dir
+   */
+  function transferTo(name, dir) {
+    if (!transferring) return;
+    const { entry, move } = transferring;
+    transferring = null;
+    void transferEntry(entry, move, name, dir);
+  }
+
+  /**
+   * Copies (or moves) `entry` into the folder `dir` of the workspace `name`, the one open saved
+   * first: a name the folder has is asked about, as an upload's is. That workspace's tabs are
+   * told; moved, the file open, in it, is closed.
+   * @param {Entry} entry
+   * @param {boolean} move
+   * @param {string} name
+   * @param {string} dir
+   */
+  const transferEntry = (entry, move, name, dir) =>
+    serially(async () => {
+      if (!(await savedFirst())) return;
+      const where = dir === ROOT ? `“${name}”` : `“${nameOf(dir)}” of “${name}”`;
+      try {
+        const put = await transfer({
+          from: fs,
+          path: entry.path,
+          folder: entry.kind === 'folder',
+          to: opfsFiles(spaces.folder(name)),
+          dir,
+          move,
+          clash: (given, renamed) =>
+            /** @type {Promise<Clash>} */ (ask(clashQuestion(given, renamed, where))),
+        });
+        if (put === null) return;
+        announce({ kind: 'files', name });
+      } catch (error) {
+        problem = `${entry.name} wasn't ${move ? 'moved' : 'copied'}: ${errorText(error)}`;
+      }
+      if (move) {
+        if (open && within(open.path, entry.path)) closeScript();
+        await refreshProject();
+      }
+      storageChanged();
+    });
 
   /**
    * What drops the menu `opened` once it closes, unless another opened in its place meanwhile.
@@ -943,6 +1005,16 @@
       onclose={closer(menu)}
     />
   {/key}
+{/if}
+{#if transferring}
+  <TransferDialog
+    title="{transferring.move ? 'Move' : 'Copy'} “{transferring.entry.name}” to another workspace"
+    action={transferring.move ? 'Move' : 'Copy'}
+    workspaces={workspaceNames.filter((name) => name !== workspace)}
+    folder={parentOf(transferring.entry.path)}
+    ontransfer={transferTo}
+    oncancel={() => (transferring = null)}
+  />
 {/if}
 {#if question}
   {#key question}

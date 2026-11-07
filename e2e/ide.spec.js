@@ -538,6 +538,49 @@ test('offers an empty workspace a script, an upload or the example; deleting say
   expect(errors).toEqual([]);
 });
 
+test('moves and copies a file to another workspace, a tab with it open seeing it at once', async ({
+  page,
+  context,
+}) => {
+  const errors = await opened(page);
+  await page.getByRole('button', { name: 'New workspace…' }).click();
+  const making = page.getByRole('dialog', { name: 'New workspace' });
+  await making.getByRole('textbox', { name: 'Name' }).fill('Bins');
+  await making.getByRole('button', { name: 'Create' }).click();
+  await expect(picker(page)).toHaveValue('Bins');
+  await picker(page).selectOption('Default');
+  await expect(row(page, 'main.kup')).toHaveAttribute('aria-current', 'true', { timeout: RUN_MS });
+  const other = await context.newPage();
+  await other.goto('/#w=Bins');
+  await expect(picker(other)).toHaveValue('Bins', { timeout: RUN_MS });
+
+  await choose(page, '/parts/tray.kup', 'Move to workspace…');
+  const moving = page.getByRole('dialog', { name: 'Move “tray.kup” to another workspace' });
+  // Never the workspace open; the folder it is in here, at first
+  await expect(moving.getByRole('combobox', { name: 'Workspace' }).getByRole('option')).toHaveText([
+    'Bins',
+  ]);
+  await expect(moving.getByRole('textbox', { name: 'Folder' })).toHaveValue('/parts');
+  await moving.getByRole('button', { name: 'Move' }).click();
+  await expect(row(page, 'tray.kup')).toHaveCount(0);
+  await expect(files(other).getByTitle('/parts/tray.kup', { exact: true })).toBeVisible();
+
+  // Copied twice: the second asks of the name, Rename keeping both
+  for (let i = 0; i < 2; i += 1) {
+    await choose(page, '/main.kup', 'Copy to workspace…');
+    await page
+      .getByRole('dialog', { name: 'Copy “main.kup” to another workspace' })
+      .getByRole('button', { name: 'Copy' })
+      .click();
+  }
+  const asked = page.getByRole('dialog', { name: '“main.kup” is in “Bins” already' });
+  await asked.getByRole('button', { name: 'Rename' }).click();
+  await expect(row(other, 'main 2.kup')).toBeVisible();
+  await expect(row(other, 'main.kup')).toBeVisible();
+  await expect(row(page, 'main.kup')).toHaveAttribute('aria-current', 'true');
+  expect(errors).toEqual([]);
+});
+
 test('downloads a workspace as a zip, and imports it as a new one, its name made new', async ({
   page,
 }, testInfo) => {

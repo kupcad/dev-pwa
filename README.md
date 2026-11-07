@@ -15,6 +15,12 @@ app works offline, and a browser can install it (a PWA). An Astro site of one pa
   in any case) and opens the new one, empty: only `Default` is given the starter, as an example.
   An empty workspace offers New script, Upload files… and Add the example (the starter, its
   `main.kup` opened).
+  A row's menu in the tree has Copy to workspace… and Move to workspace… (a file, or a folder with
+  all in it): a dialog (`TransferDialog.svelte`) picks another workspace and the folder there (the
+  one it is in here, at first; made where it isn't), a name the folder has is asked about as an
+  upload's is (Replace, Rename to the next free name, Cancel; `src/lib/transfer.js`), and a move
+  removes it here once copied, the workspace saved first. A tab with that workspace open sees it
+  at once.
   Picking one in the list saves the one open and opens it, on the file it had open last. The ⋯
   menu beside the list has the rest. Rename… (not `Default`) and Duplicate… (named `<name> copy`)
   copy the one open's folder (OPFS has no rename; a rename in its case alone goes by a name of its
