@@ -16,7 +16,8 @@
    * @typedef {object} Props
    * @property {string} title what it asks
    * @property {string} action what its button says (Copy, Move)
-   * @property {string[]} workspaces the workspaces it may go to: all but the one open
+   * @property {string[]} workspaces the workspaces there are
+   * @property {string} current the one open, which it can't go to
    * @property {string} folder the folder it is in, where it goes at first
    * @property {(workspace: string, folder: string) => void} ontransfer the workspace picked, and
    *   the folder typed, as a path from its root
@@ -24,7 +25,7 @@
    */
 
   /** @type {Props} */
-  let { title, action, workspaces, folder, ontransfer, oncancel } = $props();
+  let { title, action, workspaces, current, folder, ontransfer, oncancel } = $props();
 
   const id = $props.id();
   /** @type {HTMLDialogElement} */
@@ -32,8 +33,10 @@
   /** What had the focus when it opened, given it back once closed. */
   let before = /** @type {Element | null} */ (null);
   let closed = false;
+  /** The workspaces it may go to: all but the one open. */
+  const others = $derived(workspaces.filter((name) => name !== current));
   /** The workspace picked: the first, at first (read as it opens: it is mounted for each one asked). */
-  let workspace = $state(untrack(() => workspaces[0] ?? ''));
+  let workspace = $state(untrack(() => others[0] ?? ''));
   /** The folder typed. */
   let typed = $state(untrack(() => folder));
   /** The folder typed, as a path, or null where it can't be one. */
@@ -73,13 +76,13 @@
 >
   <form onsubmit={submit}>
     <h2 id="{id}-title">{title}</h2>
-    {#if workspaces.length === 0}
+    {#if others.length === 0}
       <p>There is no other workspace. Make one first.</p>
     {:else}
       <label>
         Workspace
         <select class="kc-control" bind:value={workspace}>
-          {#each workspaces as each (each)}
+          {#each others as each (each)}
             <option value={each}>{each}</option>
           {/each}
         </select>
@@ -103,7 +106,7 @@
     {/if}
     <div class="buttons">
       <button type="button" class="kc-control" onclick={() => close(oncancel)}>Cancel</button>
-      {#if workspaces.length > 0}
+      {#if others.length > 0}
         <button type="submit" class="kc-control kc-primary" disabled={target === null}
           >{action}</button
         >

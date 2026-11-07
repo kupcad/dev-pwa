@@ -89,7 +89,7 @@ pnpm preview           # dist/ served, the service worker working
 pnpm check             # lint, fmt:check, astro check, svelte-check, and the worker's own types (worker/tsconfig.json)
 pnpm lint              # oxlint
 pnpm fmt               # oxfmt, and prettier for .svelte and .astro: what `fmt:check` checks
-pnpm test              # Vitest: OPFS and workspaces (over a stand-in in memory), zips, storage, the project, the worker's build, updates
+pnpm test              # Vitest: OPFS, workspaces and copies between them (over a stand-in in memory), zips, storage, the project, the worker's build, updates; the workspaces' components under jsdom
 pnpm exec playwright install chromium   # once: the browser the next one drives
 pnpm test:browser      # Playwright: the site built and driven in Chromium, offline too
 pnpm icons             # public/icons/ from public/icon.svg

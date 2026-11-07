@@ -1010,7 +1010,8 @@
   <TransferDialog
     title="{transferring.move ? 'Move' : 'Copy'} “{transferring.entry.name}” to another workspace"
     action={transferring.move ? 'Move' : 'Copy'}
-    workspaces={workspaceNames.filter((name) => name !== workspace)}
+    workspaces={workspaceNames}
+    current={workspace}
     folder={parentOf(transferring.entry.path)}
     ontransfer={transferTo}
     oncancel={() => (transferring = null)}

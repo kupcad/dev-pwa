@@ -113,6 +113,15 @@
     };
   }
 
+  /**
+   * What drops the menu `opened` once it closes, unless another opened in its place meanwhile
+   * (as the IDE drops a row's).
+   * @param {typeof menu} opened
+   */
+  const closer = (opened) => () => {
+    if (menu === opened) menu = null;
+  };
+
   /** @param {MouseEvent & { currentTarget: HTMLButtonElement }} event */
   function openMenu(event) {
     const { left, bottom } = event.currentTarget.getBoundingClientRect();
@@ -187,7 +196,9 @@
 />
 
 {#if menu}
-  <ContextMenu {items} at={menu} label="Workspace “{current}”" onclose={() => (menu = null)} />
+  {#key menu}
+    <ContextMenu {items} at={menu} label="Workspace “{current}”" onclose={closer(menu)} />
+  {/key}
 {/if}
 {#if naming}
   <NameDialog
