@@ -4,8 +4,10 @@
 // cleared), and any is renamed, or deleted with all its files while another is left.
 // Each is renamed and duplicated by copying its folder (OPFS has no rename).
 // Each is downloaded as a zip of its files in a folder named for it, and a zip is imported as a
-// new one, its files with or without such a folder.
+// new one, its files with or without such a folder: the files the tree shows (scripts and the data
+// they read), the rest left out.
 
+import { kindOf, SKIPPED_FOLDER } from '@kupcad/files';
 import { copyFolder, opfsFiles } from './opfs.js';
 import { unzip, zip } from './zip.js';
 
@@ -64,6 +66,34 @@ export function uniqueWorkspaceName(base, existing) {
     const name = [...trimmed].slice(0, room).join('').trim() + suffix;
     if (workspaceNameError(name, existing) === null) return name;
   }
+}
+
+/** Whether `path` is in a folder the tree hides, or is one. @param {string} path */
+const inHiddenFolder = (path) => path.split('/').some((name) => SKIPPED_FOLDER.test(name));
+
+/**
+ * The entries of a zip (`withoutTopFolder`'s) a workspace keeps: the files the tree shows, scripts
+ * and the data they read (@kupcad/files' kindOf), in no folder it hides (a hidden one,
+ * `node_modules`, `target`: SKIPPED_FOLDER), and the folders that hold nothing; the rest
+ * counted. Kept, the others would be in the browser's storage unseen, used by no script, and
+ * in the workspace's next zip.
+ * @param {ZipEntry[]} entries
+ * @returns {{ kept: ZipEntry[], skipped: number }}
+ */
+export function usableEntries(entries) {
+  const files = entries.filter((entry) => entry.data !== undefined);
+  const kept = files.filter(
+    ({ path }) =>
+      !inHiddenFolder(path) && kindOf(/** @type {string} */ (path.split('/').at(-1))) !== null,
+  );
+  // A folder made where a file kept is in it; one that holds nothing is kept as it is
+  const empty = entries.filter(
+    ({ path, data }) =>
+      data === undefined &&
+      !inHiddenFolder(path) &&
+      !files.some((file) => file.path.startsWith(`${path}/`)),
+  );
+  return { kept: [...empty, ...kept], skipped: files.length - kept.length };
 }
 
 /**
@@ -265,15 +295,16 @@ export function workspaces(storage = navigator.storage) {
     },
 
     /**
-     * Makes the workspace `name` of the zip `bytes`'s files, refused (nothing made) as `unzip`
-     * refuses the zip.
+     * Makes the workspace `name` of the zip `bytes`'s files that it uses (`usableEntries`),
+     * refused (nothing made) as `unzip` refuses the zip.
      * @param {string} name
      * @param {Uint8Array<ArrayBuffer>} bytes
-     * @returns {Promise<string>} the name it was made with
+     * @returns {Promise<{ name: string, skipped: number }>} the name it was made with, and how
+     *   many of the zip's files were left out
      */
     async fromZip(name, bytes) {
       const trimmed = await this.newName(name);
-      const entries = withoutTopFolder(await unzip(bytes));
+      const { kept: entries, skipped } = usableEntries(withoutTopFolder(await unzip(bytes)));
       await made(trimmed, async (folder) => {
         const files = opfsFiles(folder);
         for (const { path, data } of entries) {
@@ -285,7 +316,7 @@ export function workspaces(storage = navigator.storage) {
           }
         }
       });
-      return trimmed;
+      return { name: trimmed, skipped };
     },
 
     /**

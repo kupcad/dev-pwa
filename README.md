@@ -30,7 +30,9 @@ app works offline, and a browser can install it (a PWA). An Astro site of one pa
   save it first and open the result on the file it had open. Download .zip saves the one open as a zip of its files in a
   folder named for it (`src/lib/zip.js`: deflated with the browser's own `CompressionStream`, no
   library); Import .zip… makes a new workspace of a zip, named after the zip's file (a number
-  added where the name is taken), its files with or without a folder of their own around them.
+  added where the name is taken), its files with or without a folder of their own around them:
+  the files the tree shows (scripts and the data they read) out of the folders it hides (hidden
+  ones, `node_modules`, `target`), how many others were left out said under the files.
   A zip is refused where a path leaves its folder (`..`, absolute, a `\`), a file's CRC is wrong,
   or it holds more than 10 000 files or 256 MB. Delete… deletes the one open with its files, once
   a dialog confirms it (saying how many files and bytes that is), and opens the first in the list;

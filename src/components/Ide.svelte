@@ -129,6 +129,8 @@
   let transferring = $state.raw(/** @type {{ entry: Entry, move: boolean } | null} */ (null));
   /** What went wrong last, until it is dismissed or something else goes wrong. */
   let problem = $state('');
+  /** What the person should know of something done (an import's files left out), until dismissed. */
+  let notice = $state('');
   /** How many files were asked to open: one read after a later one is asked for isn't shown. */
   let opening = 0;
   /** Whether the browser was asked to keep the project when it frees space. */
@@ -369,7 +371,13 @@
       if (file.size > MAX_ZIP_BYTES) {
         throw new Error(`It is larger than ${MAX_ZIP_BYTES / 1024 / 1024} MB.`);
       }
-      return spaces.fromZip(name, new Uint8Array(await file.arrayBuffer()));
+      const result = await spaces.fromZip(name, new Uint8Array(await file.arrayBuffer()));
+      const { skipped } = result;
+      notice =
+        skipped === 0
+          ? ''
+          : `${skipped} ${skipped === 1 ? 'file' : 'files'} KupCAD doesn't use ${skipped === 1 ? 'was' : 'were'} left out of ${file.name}.`;
+      return result.name;
     }, `${file.name} wasn't imported`);
 
   /**
@@ -942,6 +950,11 @@
         <span>{problem}</span>
         <button type="button" aria-label="Dismiss" onclick={() => (problem = '')}>×</button>
       </p>
+    {:else if notice}
+      <p class="notice" role="status">
+        <span>{notice}</span>
+        <button type="button" aria-label="Dismiss" onclick={() => (notice = '')}>×</button>
+      </p>
     {:else if storage}
       <p class="storage">
         {storage.used}{#if storage.mayClear}<br /><span title={MAY_CLEAR}
@@ -1056,6 +1069,7 @@
     min-height: 0;
   }
   .storage,
+  .notice,
   .problem {
     margin: 0;
     padding: 6px 12px;
@@ -1065,12 +1079,19 @@
   .storage {
     color: var(--kc-muted);
   }
+  .notice,
   .problem {
     display: flex;
     align-items: start;
     gap: 6px;
+  }
+  .notice {
+    color: var(--kc-muted);
+  }
+  .problem {
     color: var(--kc-error);
   }
+  .notice button,
   .problem button {
     flex: none;
     margin-left: auto;

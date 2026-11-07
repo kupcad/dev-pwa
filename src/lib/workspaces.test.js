@@ -6,6 +6,7 @@ import {
   hashOf,
   MAX_WORKSPACE_NAME,
   uniqueWorkspaceName,
+  usableEntries,
   withoutTopFolder,
   workspaceNameError,
   workspaceOfHash,
@@ -173,7 +174,7 @@ describe('a workspace', () => {
       'Shelf/parts/empty',
       'Shelf/parts/lid.kup',
     ]);
-    expect(await spaces.fromZip('Shelf 2', zipped)).toBe('Shelf 2');
+    expect(await spaces.fromZip('Shelf 2', zipped)).toEqual({ name: 'Shelf 2', skipped: 0 });
     expect(await contentOf(spaces, 'Shelf 2')).toEqual(SHELF);
   });
 
@@ -191,6 +192,21 @@ describe('a workspace', () => {
     });
   });
 
+  it('is imported with the files the tree shows alone, saying how many were left out', async () => {
+    // A README, an image, a .git folder and node_modules were written, seen by no one
+    const { spaces } = inMemory();
+    const zipped = await zip([
+      { path: 'main.kup', data: text('cube(1)\n') },
+      { path: 'README.md', data: text('# Shelf\n') },
+      { path: 'parts/photo.png', data: text('png') },
+      { path: '.git/config', data: text('') },
+      { path: 'node_modules/x/index.kup', data: text('cube(9)\n') },
+    ]);
+    const made = await spaces.fromZip('Picky', new Uint8Array(await zipped.arrayBuffer()));
+    expect(made).toEqual({ name: 'Picky', skipped: 4 });
+    expect(await contentOf(spaces, 'Picky')).toEqual({ 'main.kup': 'cube(1)\n' });
+  });
+
   it('is not made of a zip refused, nor of a name refused', async () => {
     const { spaces } = inMemory();
     const zipped = await zip([{ path: '../escape.kup', data: text('') }]);
@@ -204,6 +220,40 @@ describe('a workspace', () => {
 
 /** A file of a zip, empty. @param {string} path */
 const file = (path) => ({ path, data: text('') });
+
+describe("the zip's files a workspace keeps", () => {
+  it('are scripts and the data they read, out of the folders the tree hides', () => {
+    const { kept, skipped } = usableEntries([
+      file('main.kup'),
+      file('kupcad.json'),
+      file('kupcad.lock'),
+      file('parts/lid.stl'),
+      file('notes.txt'),
+      file('parts/photo.png'),
+      file('.hidden/a.kup'),
+      file('target/b.kup'),
+      file('parts/node_modules/c.kup'),
+    ]);
+    expect(kept.map(({ path }) => path)).toEqual([
+      'main.kup',
+      'kupcad.json',
+      'kupcad.lock',
+      'parts/lid.stl',
+    ]);
+    expect(skipped).toBe(5);
+  });
+
+  it('keep a folder that holds nothing, and leave out one whose files are all left out', () => {
+    const { kept, skipped } = usableEntries([
+      { path: 'empty' },
+      { path: 'docs' },
+      file('docs/guide.md'),
+      { path: '.git' },
+    ]);
+    expect(kept.map(({ path }) => path)).toEqual(['empty']);
+    expect(skipped).toBe(1);
+  });
+});
 
 describe("a zip's files as a workspace's", () => {
   it('lose the one folder they are all in, and what macOS adds', () => {

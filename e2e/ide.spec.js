@@ -3,6 +3,8 @@ import { zip } from '../src/lib/zip.js';
 
 /** @import { Page } from '@playwright/test' */
 
+/** A file's text as a zip holds it. @param {string} value */
+const encoded = (value) => new TextEncoder().encode(value);
 /** How long the core may take to load and run a script: its module compiles on a first visit. */
 const RUN_MS = 60_000;
 
@@ -653,6 +655,36 @@ test('downloads a workspace as a zip, and imports it as a new one, its name made
   await expect(row(page, 'main.kup')).toHaveAttribute('aria-current', 'true', { timeout: RUN_MS });
   await expect(row(page, 'tray.kup')).toBeVisible();
   await expect(status(page)).toHaveText(/Ready · \d+ ms/, { timeout: RUN_MS });
+  expect(errors).toEqual([]);
+});
+
+test("imports a zip's scripts and data alone, saying how many others it left out", async ({
+  page,
+}) => {
+  const errors = await opened(page);
+  const mixed = await zip([
+    { path: 'main.kup', data: encoded('cube(4)\n') },
+    { path: 'README.md', data: encoded('# Notes\n') },
+    { path: '.git/config', data: encoded('') },
+  ]);
+  const choosing = page.waitForEvent('filechooser');
+  await chooseForWorkspace(page, 'Import .zip…');
+  await (
+    await choosing
+  ).setFiles({
+    name: 'notes.zip',
+    mimeType: 'application/zip',
+    buffer: Buffer.from(await mixed.arrayBuffer()),
+  });
+  await page
+    .getByRole('dialog', { name: 'Import workspace' })
+    .getByRole('button', { name: 'Import' })
+    .click();
+  await expect(picker(page)).toHaveValue('notes');
+  await expect(row(page, 'main.kup')).toBeVisible({ timeout: RUN_MS });
+  await expect(files(page).getByRole('status')).toContainText(
+    "2 files KupCAD doesn't use were left out of notes.zip.",
+  );
   expect(errors).toEqual([]);
 });
 
