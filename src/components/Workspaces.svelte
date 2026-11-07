@@ -4,13 +4,15 @@
   from the list, and its menu (⋯, @kupcad/files' ContextMenu): Rename…, Duplicate…, Download .zip,
   Import .zip… (a zip picked becomes a new workspace) and Delete…. A name is asked in a dialog
   (NameDialog, refused as workspaces.js refuses one; a rename may keep its own name, in another
-  case too); deleting asks first (@kupcad/files' AskDialog), saying what is lost. The default
+  case too); deleting asks first (@kupcad/files' AskDialog), saying what is lost (its files
+  counted as it asks). The default
   can't be renamed or deleted: its menu has neither.
 -->
 <script>
   import { AskDialog, ContextMenu } from '@kupcad/files';
   import { DEFAULT_WORKSPACE, uniqueWorkspaceName } from '../lib/workspaces.js';
   import { stemOf } from '../lib/project.js';
+  import { formatBytes } from '../lib/storage.js';
   import NameDialog from './NameDialog.svelte';
 
   /** @import { MenuItem } from '@kupcad/files' */
@@ -27,6 +29,8 @@
    * @property {(from: string, to: string) => void} onduplicate the person named a copy of the one
    *   open
    * @property {(name: string) => void} ondownload the person asked for the one open as a zip
+   * @property {(name: string) => Promise<{ files: number, bytes: number }>} measure how many
+   *   files the workspace `name` has, and their bytes: what deleting it loses
    * @property {(file: File, name: string) => void} onimport the person picked a zip to import,
    *   and named the workspace it makes
    */
@@ -43,6 +47,7 @@
     onduplicate,
     ondownload,
     onimport,
+    measure,
   } = $props();
 
   /**
@@ -53,6 +58,8 @@
   let naming = $state.raw(null);
   /** Whether deleting the one open is being asked. */
   let deleting = $state(false);
+  /** What deleting it loses, once counted (`…` until then; empty where it couldn't be). */
+  let lost = $state('');
   /** The menu shown, where it opened. */
   let menu = $state.raw(/** @type {{ x: number, y: number } | null} */ (null));
   let picker = $state(/** @type {HTMLInputElement | undefined} */ (undefined));
@@ -68,9 +75,22 @@
       { text: 'Download .zip', action: () => ondownload(current) },
       { text: 'Import .zip…', action: () => picker?.click() },
     );
-    if (own) all.push('-', { text: 'Delete…', action: () => (deleting = true) });
+    if (own) all.push('-', { text: 'Delete…', action: startDelete });
     return all;
   });
+
+  async function startDelete() {
+    const name = current;
+    lost = '…';
+    deleting = true;
+    try {
+      const { files, bytes } = await measure(name);
+      if (current === name)
+        lost = `${files} ${files === 1 ? 'file' : 'files'}, ${formatBytes(bytes)}`;
+    } catch {
+      lost = '';
+    }
+  }
 
   function startRename() {
     const from = current;
@@ -182,7 +202,7 @@
 {#if deleting}
   <AskDialog
     title="Delete the workspace “{current}”?"
-    text="All its files are deleted with it. It can’t be undone."
+    text="All its files are deleted with it{lost ? `: ${lost}` : ''}. It can’t be undone."
     answers={[
       { text: 'Cancel', value: 'cancel', primary: true },
       { text: 'Delete', value: 'delete' },

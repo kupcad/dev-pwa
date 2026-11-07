@@ -497,6 +497,47 @@ test("follows another tab's changes to the workspaces at once: made, renamed, de
   );
 });
 
+test('offers an empty workspace a script, an upload or the example; deleting says what is lost', async ({
+  page,
+}) => {
+  const errors = await opened(page);
+  // What the origin's storage holds, under the files
+  await expect(files(page).getByText(/^[\d.]+ \w+ of [\d.]+ \w+ used/)).toBeVisible();
+  await page.getByRole('button', { name: 'New workspace…' }).click();
+  const making = page.getByRole('dialog', { name: 'New workspace' });
+  await making.getByRole('textbox', { name: 'Name' }).fill('Empty');
+  await making.getByRole('button', { name: 'Create' }).click();
+  const work = page.getByRole('group', { name: 'This workspace is empty.' });
+  await expect(work).toBeVisible();
+
+  await work.getByRole('button', { name: 'New script' }).click();
+  await expect(files(page).getByRole('textbox', { name: 'New script name' })).toBeFocused();
+  await page.keyboard.press('Escape');
+
+  const choosing = page.waitForEvent('filechooser');
+  await work.getByRole('button', { name: 'Upload files…' }).click();
+  await (
+    await choosing
+  ).setFiles({ name: 'lid.kup', mimeType: 'text/plain', buffer: Buffer.from('cube(1)\n') });
+  await expect(row(page, 'lid.kup')).toBeVisible();
+  await expect(page.getByText('Open a script from the files.')).toBeVisible();
+  await row(page, 'lid.kup').click();
+
+  await chooseForWorkspace(page, 'Delete…');
+  const deleting = page.getByRole('dialog', { name: 'Delete the workspace “Empty”?' });
+  await expect(deleting).toContainText('All its files are deleted with it: 1 file, 8 bytes.');
+  await deleting.getByRole('button', { name: 'Cancel' }).click();
+
+  await newWorkspace(page, 'Example', '');
+  await choose(page, '/example.kup', 'Delete…');
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
+  await work.getByRole('button', { name: 'Add the example' }).click();
+  await expect(row(page, 'main.kup')).toHaveAttribute('aria-current', 'true', { timeout: RUN_MS });
+  await expect(row(page, 'tray.kup')).toBeVisible();
+  await expect(status(page)).toHaveText(/Ready · \d+ ms/, { timeout: RUN_MS });
+  expect(errors).toEqual([]);
+});
+
 test('downloads a workspace as a zip, and imports it as a new one, its name made new', async ({
   page,
 }, testInfo) => {

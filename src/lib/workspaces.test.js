@@ -137,6 +137,12 @@ describe('a workspace', () => {
     await expect(spaces.rename(DEFAULT_WORKSPACE, 'Main')).rejects.toThrow('can’t be renamed');
   });
 
+  it('is measured: its files, not its folders, and their bytes', async () => {
+    const { spaces } = await withShelf();
+    expect(await spaces.size('Shelf')).toEqual({ files: 2, bytes: 16 });
+    expect(await spaces.size(DEFAULT_WORKSPACE)).toEqual({ files: 0, bytes: 0 });
+  });
+
   it('is zipped in a folder named for it, and imported from that zip as it was', async () => {
     const { spaces } = await withShelf();
     const zipped = new Uint8Array(await (await spaces.toZip('Shelf')).arrayBuffer());

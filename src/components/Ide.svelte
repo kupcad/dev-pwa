@@ -9,7 +9,8 @@
   rename) and open it, and Delete… deletes the one open with its files, the default left open; each
   opens the file it had open last. The URL names the workspace open (#w=…; changed, it opens the
   one it names), and the tabs tell each other of their changes to the workspaces (a
-  BroadcastChannel), which they follow at once. Its tree (@kupcad/files) makes scripts and folders (its bar, a row's menu),
+  BroadcastChannel), which they follow at once. An empty workspace offers a script, an upload and the
+  example in place of the playground; under the files, the storage used is said. Its tree (@kupcad/files) makes scripts and folders (its bar, a row's menu),
   renames and deletes them, takes the person's files into a folder (dropped on it from the
   system's file manager, or uploaded from a row's menu: a name the folder has asked about,
   Replace, Rename or Cancel) and downloads one (a row's menu, a popover). A script clicked opens
@@ -45,6 +46,7 @@
   import { opfsFiles } from '../lib/opfs.js';
   import { importable, MAIN_SCRIPT, sameFiles, STARTER, stemOf } from '../lib/project.js';
   import { DEFAULT_WORKSPACE, hashOf, workspaceOfHash, workspaces } from '../lib/workspaces.js';
+  import { storageText } from '../lib/storage.js';
   import { MAX_ZIP_BYTES } from '../lib/zip.js';
   import Workspaces from './Workspaces.svelte';
 
@@ -62,6 +64,8 @@
   const SAVE_MS = 500;
   /** The settings' keys: the files' width, the workspace open, each workspace's file open last. */
   const KEYS = { files: 'ide.files', workspace: 'ide.workspace', open: 'ide.open' };
+  /** How long a change to the storage waits to be said, in milliseconds. */
+  const STORAGE_MS = 1000;
   /** The channel the tabs tell each other of their changes to the workspaces on. */
   const CHANNEL = 'kupcad-workspaces';
   /** What the upload picker offers: the files a project shows. */
@@ -72,7 +76,11 @@
   let filesWidth = $derived(sizeSetting(settings, KEYS.files, 224));
   const spaces = workspaces();
   /** A write of the person's: the first asks the browser to keep the project when it frees space. */
-  const kept = (/** @type {Promise<void>} */ writing) => writing.then(keep);
+  const kept = (/** @type {Promise<void>} */ writing) =>
+    writing.then(() => {
+      keep();
+      storageChanged();
+    });
   /** The workspaces there are, the default first. */
   let workspaceNames = $state.raw([DEFAULT_WORKSPACE]);
   /** The workspace the page opens first: the one its URL names, else the one open last. */
@@ -116,6 +124,10 @@
   let opening = 0;
   /** Whether the browser was asked to keep the project when it frees space. */
   let asked = false;
+  /** What the origin's storage holds, as said under the files (empty: the browser doesn't say). */
+  let storage = $state('');
+  /** The wait before the storage is said again, while there is one. */
+  let storageTimer = /** @type {ReturnType<typeof setTimeout> | undefined} */ (undefined);
   let playground = $state(/** @type {ReturnType<typeof Playground> | undefined} */ (undefined));
   let picker = $state(/** @type {HTMLInputElement | undefined} */ (undefined));
   /** The folder the files picked to upload go in. */
@@ -149,7 +161,7 @@
         writeBytes: (path, bytes) => kept(spaceFiles.write(path, bytes)),
         mkdir: (path) => kept(spaceFiles.mkdir(path)),
         rename: (from, to) => kept(spaceFiles.rename(from, to)),
-        remove: (path) => spaceFiles.remove(path),
+        remove: (path) => spaceFiles.remove(path).then(storageChanged),
       },
       {
         onproblem: (text) => (problem = text),
@@ -449,22 +461,49 @@
   async function start() {
     try {
       const empty = (await fs.readDir(ROOT)).length === 0;
-      if (empty && workspace === DEFAULT_WORKSPACE) {
-        for (const [path, text] of Object.entries(STARTER)) {
-          await fs.mkdir(parentOf(path));
-          await fs.write(path, text);
-        }
-      }
+      if (empty && workspace === DEFAULT_WORKSPACE) await writeExample();
     } catch (error) {
       problem = `The project wasn't opened: ${errorText(error)}`;
       return;
     }
     await listNow();
+    storageChanged();
     const opened = project.entries.filter((entry) => languageOf(entry.name) !== null);
     const at = (/** @type {string | null} */ path) => opened.find((entry) => entry.path === path);
     const first =
       at(lastOpen()) ?? at(MAIN_SCRIPT) ?? opened.find((entry) => entry.kind === 'script');
     if (first) await openScript(first);
+  }
+
+  /** Writes the starter in the workspace open: the example. */
+  async function writeExample() {
+    for (const [path, text] of Object.entries(STARTER)) {
+      await fs.mkdir(parentOf(path));
+      await fs.write(path, text);
+    }
+  }
+
+  /** Gives the workspace open, empty, the example, and opens its main script. */
+  const addExample = () =>
+    serially(async () => {
+      try {
+        await kept(writeExample());
+      } catch (error) {
+        problem = `The example wasn't added: ${errorText(error)}`;
+      }
+      await start();
+    });
+
+  /**
+   * Says what the origin's storage holds again, a moment after it changed (once for the changes
+   * of that moment: a browser's estimate isn't free).
+   */
+  function storageChanged() {
+    if (storageTimer !== undefined) return;
+    storageTimer = setTimeout(async () => {
+      storageTimer = undefined;
+      storage = await storageText();
+    }, STORAGE_MS);
   }
 
   /** Asks the browser, once, to keep the project when it frees space (as it may a site's storage it isn't told to keep). */
@@ -810,6 +849,7 @@
       onduplicate={(from, to) => void duplicateWorkspace(from, to)}
       ondownload={(name) => void downloadWorkspace(name)}
       onimport={(file, name) => void importWorkspace(file, name)}
+      measure={(name) => spaces.size(name)}
     />
     <div class="tree">
       <FileTree
@@ -840,6 +880,14 @@
     {:else}
       <p class="kept">Kept in this browser. Download a file to keep a copy of your own.</p>
     {/if}
+    {#if storage}
+      <p
+        class="storage"
+        title="Persistent: the browser keeps it when short of space; not persistent: it may clear it"
+      >
+        {storage}
+      </p>
+    {/if}
   </nav>
   <Splitter
     bind:size={filesWidth}
@@ -861,8 +909,29 @@
         onsource={edited}
       />
     </div>
-    {#if !open}
-      <p class="none">Open a script from the files, or make one with New script.</p>
+    {#if !open && !busy}
+      {#if project.entries.length > 0}
+        <p class="none">Open a script from the files.</p>
+      {:else}
+        <div class="none">
+          <div class="empty" role="group" aria-labelledby="empty-workspace">
+            <p id="empty-workspace">This workspace is empty.</p>
+            <div class="actions">
+              <button
+                type="button"
+                class="kc-control kc-primary"
+                onclick={() => project.startNew('script', ROOT)}>New script</button
+              >
+              <button type="button" class="kc-control" onclick={() => upload(ROOT)}
+                >Upload files…</button
+              >
+              <button type="button" class="kc-control" onclick={() => void addExample()}
+                >Add the example</button
+              >
+            </div>
+          </div>
+        </div>
+      {/if}
     {/if}
   </main>
 </div>
@@ -924,6 +993,12 @@
   .kept {
     color: var(--kc-muted);
   }
+  .storage {
+    margin: 0;
+    padding: 0 12px 6px;
+    font-size: 12px;
+    color: var(--kc-muted);
+  }
   .problem {
     display: flex;
     align-items: start;
@@ -951,7 +1026,7 @@
     flex: 1;
     min-height: 0;
   }
-  /* No script open: the playground under a word on what to do */
+  /* No script open: the playground under a word on what to do (in an empty workspace, buttons) */
   .none {
     position: absolute;
     inset: 0;
@@ -962,6 +1037,15 @@
     text-align: center;
     color: var(--kc-muted);
     background: var(--kc-bg);
+  }
+  .empty p {
+    margin: 0 0 12px;
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--kc-gap);
   }
   /* Narrow, the files over the playground, a few rows of them, nothing to resize between */
   @media (max-width: 800px) {

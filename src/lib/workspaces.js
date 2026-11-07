@@ -219,6 +219,17 @@ export function workspaces(storage = navigator.storage) {
     },
 
     /**
+     * How many files the workspace `name` has, and how many bytes they are.
+     * @param {string} name
+     */
+    async size(name) {
+      const found = (await opfsFiles(this.folder(name)).walk()).flatMap(({ file }) =>
+        file ? [file.size] : [],
+      );
+      return { files: found.length, bytes: found.reduce((sum, size) => sum + size, 0) };
+    },
+
+    /**
      * The workspace `name` as a zip: its files and folders in a folder named for it.
      * @param {string} name
      */

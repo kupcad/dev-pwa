@@ -13,6 +13,8 @@ app works offline, and a browser can install it (a PWA). An Astro site of one pa
   namespaces). `Default` is always there and can't be deleted. New workspace… asks a name in a
   dialog (`NameDialog.svelte`: not empty, at most 64 characters, no `/` or `\`, not one there is
   in any case) and opens the new one, empty: only `Default` is given the starter, as an example.
+  An empty workspace offers New script, Upload files… and Add the example (the starter, its
+  `main.kup` opened).
   Picking one in the list saves the one open and opens it, on the file it had open last. The ⋯
   menu beside the list has the rest. Rename… (not `Default`) and Duplicate… (named `<name> copy`)
   copy the one open's folder (OPFS has no rename; a rename in its case alone goes by a name of its
@@ -23,7 +25,7 @@ app works offline, and a browser can install it (a PWA). An Astro site of one pa
   added where the name is taken), its files with or without a folder of their own around them.
   A zip is refused where a path leaves its folder (`..`, absolute, a `\`), a file's CRC is wrong,
   or it holds more than 10 000 files or 256 MB. Delete… deletes the one open with its files, once
-  a dialog confirms it, and opens `Default`. The URL names the workspace open (`#w=<name>`,
+  a dialog confirms it (saying how many files and bytes that is), and opens `Default`. The URL names the workspace open (`#w=<name>`,
   URI-encoded, replaced, not added to the history): a page opens the one it names (else the one
   open last, else `Default`), and opens another as the person changes it, so two tabs can work in
   two workspaces. A tab tells the others of a workspace made, renamed or deleted
@@ -37,7 +39,10 @@ app works offline, and a browser can install it (a PWA). An Astro site of one pa
   and deletes them, takes files into a folder (dropped on its row from the system's file manager, or
   Upload Files…: scripts and the files scripts read; a name the folder has asked about, Replace,
   Rename to the next free name or Cancel) and downloads a file (Download), each from a row's
-  right-click menu (`@kupcad/files`' `ContextMenu`), the questions in its `AskDialog`. Files dropped
+  right-click menu (`@kupcad/files`' `ContextMenu`), the questions in its `AskDialog`. Under the files, what the origin's
+  storage holds of what the browser allows, and whether it is persistent
+  (`navigator.storage.estimate()`, `persisted()`, `src/lib/storage.js`; said again a moment after
+  a change, nothing said where a browser doesn't). Files dropped
   anywhere else are refused, not opened in the IDE's place. A rename is a copy, then a removal: no
   rename is in every browser's OPFS. The first write asks the browser to keep the project when it
   frees space (`navigator.storage.persist()`).
@@ -76,7 +81,7 @@ pnpm preview           # dist/ served, the service worker working
 pnpm check             # lint, fmt:check, astro check, svelte-check, and the worker's own types (worker/tsconfig.json)
 pnpm lint              # oxlint
 pnpm fmt               # oxfmt, and prettier for .svelte and .astro: what `fmt:check` checks
-pnpm test              # Vitest: OPFS and workspaces (over a stand-in in memory), zips, the project, the worker's build, updates
+pnpm test              # Vitest: OPFS and workspaces (over a stand-in in memory), zips, storage, the project, the worker's build, updates
 pnpm exec playwright install chromium   # once: the browser the next one drives
 pnpm test:browser      # Playwright: the site built and driven in Chromium, offline too
 pnpm icons             # public/icons/ from public/icon.svg
