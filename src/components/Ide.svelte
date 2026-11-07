@@ -877,10 +877,7 @@
         <span>{problem}</span>
         <button type="button" aria-label="Dismiss" onclick={() => (problem = '')}>×</button>
       </p>
-    {:else}
-      <p class="kept">Kept in this browser. Download a file to keep a copy of your own.</p>
-    {/if}
-    {#if storage}
+    {:else if storage}
       <p
         class="storage"
         title="Persistent: the browser keeps it when short of space; not persistent: it may clear it"
@@ -983,20 +980,14 @@
     flex: 1;
     min-height: 0;
   }
-  .kept,
+  .storage,
   .problem {
     margin: 0;
     padding: 6px 12px;
     font-size: 12px;
     border-top: 1px solid var(--kc-border);
   }
-  .kept {
-    color: var(--kc-muted);
-  }
   .storage {
-    margin: 0;
-    padding: 0 12px 6px;
-    font-size: 12px;
     color: var(--kc-muted);
   }
   .problem {
