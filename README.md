@@ -8,8 +8,16 @@ app works offline, and a browser can install it (a PWA). An Astro site of one pa
 
 ## How it works
 
-* **The project** (`@kupcad/files`' `Project` over `src/lib/opfs.js`): a folder (`project`) of the
-  origin's private file system, given a starter while it is empty (`src/lib/project.js`: `main.kup`
+* **Workspaces** (`src/components/Workspaces.svelte`, `src/lib/workspaces.js`): projects of their
+  own, each a folder of the origin's private file system under `workspaces/` (OPFS has no
+  namespaces). `Default` is always there and can't be deleted. New workspace… asks a name in a
+  dialog (not empty, at most 64 characters, no `/` or `\`, not one there is in any case) and opens
+  the new one on the starter; picking one in the list saves the one open and opens it, on the file
+  it had open last; Delete… deletes the one open with its files, once a dialog confirms it, and
+  opens `Default`. A workspace deleted in another tab is left for `Default` when the page comes
+  back to the front.
+* **The project** (`@kupcad/files`' `Project` over `src/lib/opfs.js`): the workspace open's folder,
+  given a starter while it is empty (`src/lib/project.js`: `main.kup`
   importing `parts/tray.kup`). The tree makes scripts and folders (its bar, a row's menu), renames
   and deletes them, takes files into a folder (dropped on its row from the system's file manager, or
   Upload Files…: scripts and the files scripts read; a name the folder has asked about, Replace,
@@ -50,9 +58,10 @@ pnpm install
 pnpm dev               # astro dev: the IDE as you change it (no service worker)
 pnpm build             # dist/, sw.js with it
 pnpm preview           # dist/ served, the service worker working
-pnpm check             # astro check, svelte-check, and the worker's own types (worker/tsconfig.json)
-pnpm fmt               # prettier: what `fmt:check` checks
-pnpm test              # Vitest: OPFS (over a stand-in in memory), the project, the worker's build, updates
+pnpm check             # lint, fmt:check, astro check, svelte-check, and the worker's own types (worker/tsconfig.json)
+pnpm lint              # oxlint
+pnpm fmt               # oxfmt, and prettier for .svelte and .astro: what `fmt:check` checks
+pnpm test              # Vitest: OPFS and workspaces (over a stand-in in memory), the project, the worker's build, updates
 pnpm exec playwright install chromium   # once: the browser the next one drives
 pnpm test:browser      # Playwright: the site built and driven in Chromium, offline too
 pnpm icons             # public/icons/ from public/icon.svg

@@ -1,8 +1,11 @@
 <!--
   @component
   The IDE: a project's files beside the playground, all in the browser. The project (@kupcad/files'
-  Project) is a folder of the browser's private file system (opfs.js), given a starter while it
-  is empty (project.js). Its tree (@kupcad/files) makes scripts and folders (its bar, a row's menu),
+  Project) is a workspace's folder of the browser's private file system (opfs.js, workspaces.js),
+  given a starter while it is empty (project.js). The workspaces are above the files (Workspaces):
+  one picked opens its own project (the one open saved first), New… makes one and opens it, and
+  Delete… deletes the one open with its files, the default left open; each opens the file it had
+  open last. Its tree (@kupcad/files) makes scripts and folders (its bar, a row's menu),
   renames and deletes them, takes the person's files into a folder (dropped on it from the
   system's file manager, or uploaded from a row's menu: a name the folder has asked about,
   Replace, Rename or Cancel) and downloads one (a row's menu, a popover). A script clicked opens
@@ -35,8 +38,10 @@
   import { errorText } from '@kupcad/protocol';
   import { localSettings, sizeSetting, Splitter } from '@kupcad/ui';
   import { onMount, tick } from 'svelte';
-  import { opfsFiles, projectFolder } from '../lib/opfs.js';
+  import { opfsFiles } from '../lib/opfs.js';
   import { importable, MAIN_SCRIPT, sameFiles, STARTER, stemOf } from '../lib/project.js';
+  import { DEFAULT_WORKSPACE, workspaces } from '../lib/workspaces.js';
+  import Workspaces from './Workspaces.svelte';
 
   /** @import { Clash, Entry, MenuItem } from '@kupcad/files' */
 
@@ -44,36 +49,31 @@
   const ROOT = '/';
   /** How long a script changed waits to be saved, in milliseconds. */
   const SAVE_MS = 500;
-  /** The settings' keys: the files' width, the script open last. */
-  const KEYS = { files: 'ide.files', open: 'ide.open' };
+  /** The settings' keys: the files' width, the workspace open, each workspace's file open last. */
+  const KEYS = { files: 'ide.files', workspace: 'ide.workspace', open: 'ide.open' };
   /** What the upload picker offers: the files a project shows. */
   const ACCEPT = [SCRIPT_EXTENSION, ...DATA_EXTENSIONS].map((extension) => `.${extension}`).join();
 
   const settings = localSettings();
   // As the settings have it; dragged, the pane's own until the drag is done
   let filesWidth = $derived(sizeSetting(settings, KEYS.files, 224));
-  const fs = opfsFiles(projectFolder());
+  const spaces = workspaces();
   /** A write of the person's: the first asks the browser to keep the project when it frees space. */
   const kept = (/** @type {Promise<void>} */ writing) => writing.then(keep);
-  /** The project: its tree, its scripts, the name being given in it, the saves waiting. */
-  const project = new Project(
-    ROOT,
-    {
-      readDir: (path) => fs.readDir(path),
-      read: (path) => fs.read(path),
-      exists: (path) => fs.exists(path),
-      write: (path, text) => kept(fs.write(path, text)),
-      writeBytes: (path, bytes) => kept(fs.write(path, bytes)),
-      mkdir: (path) => kept(fs.mkdir(path)),
-      rename: (from, to) => kept(fs.rename(from, to)),
-      remove: (path) => fs.remove(path),
-    },
-    {
-      onproblem: (text) => (problem = text),
-      onsave: (path) => void save(path),
-      saveAfterMs: () => SAVE_MS,
-    },
+  /** The workspaces there are, the default first. */
+  let workspaceNames = $state.raw([DEFAULT_WORKSPACE]);
+  /** The workspace open last, opened first, until the list says it is still there. */
+  const lastWorkspace = settings.get(KEYS.workspace);
+  /** The workspace open. */
+  let workspace = $state(typeof lastWorkspace === 'string' ? lastWorkspace : DEFAULT_WORKSPACE);
+  /** Whether a workspace is being opened, made or deleted: the workspaces ask nothing meanwhile. */
+  let busy = $state(true);
+  /** The workspace open's files. */
+  let fs = opfsFiles(
+    spaces.folder(typeof lastWorkspace === 'string' ? lastWorkspace : DEFAULT_WORKSPACE),
   );
+  /** The project: the workspace open's tree, its scripts, the name being given in it, the saves waiting. */
+  let project = $state.raw(projectOf(fs));
   /** The file open. */
   let open = $state.raw(/** @type {Entry | null} */ (null));
   /** What the script open may import, by the paths it names them by. */
@@ -110,9 +110,149 @@
   const conflict = $derived(open ? project.scripts.conflicts.get(open.path) : undefined);
 
   onMount(() => {
-    void start();
+    void begin();
     return () => project.dispose();
   });
+
+  /**
+   * A workspace's project over its files.
+   * @param {ReturnType<typeof opfsFiles>} spaceFiles
+   */
+  function projectOf(spaceFiles) {
+    return new Project(
+      ROOT,
+      {
+        readDir: (path) => spaceFiles.readDir(path),
+        read: (path) => spaceFiles.read(path),
+        exists: (path) => spaceFiles.exists(path),
+        write: (path, text) => kept(spaceFiles.write(path, text)),
+        writeBytes: (path, bytes) => kept(spaceFiles.write(path, bytes)),
+        mkdir: (path) => kept(spaceFiles.mkdir(path)),
+        rename: (from, to) => kept(spaceFiles.rename(from, to)),
+        remove: (path) => spaceFiles.remove(path),
+      },
+      {
+        onproblem: (text) => (problem = text),
+        onsave: (path) => void save(path),
+        saveAfterMs: () => SAVE_MS,
+      },
+    );
+  }
+
+  /** The file the workspace open had open last, by its path. */
+  function lastOpen() {
+    const all = settings.get(KEYS.open);
+    return typeof all === 'object' && all !== null
+      ? /** @type {Record<string, unknown>} */ (all)[workspace]
+      : undefined;
+  }
+
+  /**
+   * Keeps `path` as the file the workspace `name` has open (null: none).
+   * @param {string | null} path
+   */
+  function keepOpen(path, name = workspace) {
+    const all = settings.get(KEYS.open);
+    /** @type {Record<string, unknown>} */
+    const byWorkspace = typeof all === 'object' && all !== null ? { ...all } : {};
+    if (path === null) delete byWorkspace[name];
+    else byWorkspace[name] = path;
+    settings.set(KEYS.open, byWorkspace);
+  }
+
+  /** Lists the workspaces, then opens the one open last (the default where it's gone). */
+  async function begin() {
+    try {
+      workspaceNames = await spaces.list();
+    } catch (error) {
+      problem = `The workspaces weren't listed: ${errorText(error)}`;
+      return;
+    }
+    if (!workspaceNames.includes(workspace)) leaveFor(DEFAULT_WORKSPACE);
+    await start();
+    busy = false;
+  }
+
+  /**
+   * Leaves the workspace open for `name`'s, nothing of it shown yet (`start` shows it): its
+   * project dropped, with what was being opened and read of it.
+   * @param {string} name
+   */
+  function leaveFor(name) {
+    project.dispose();
+    opening += 1;
+    open = null;
+    files = {};
+    imported.clear();
+    workspace = name;
+    settings.set(KEYS.workspace, name);
+    fs = opfsFiles(spaces.folder(name));
+    project = projectOf(fs);
+  }
+
+  /**
+   * Opens another workspace, the one open saved first.
+   * @param {string} name
+   */
+  async function switchWorkspace(name) {
+    if (name === workspace) return;
+    busy = true;
+    try {
+      keepEditor();
+      await saveAll();
+      if (project.scripts.unsaved.size > 0) {
+        problem = `Not all of “${workspace}” was saved, so it stays open.`;
+        return;
+      }
+      leaveFor(name);
+      await start();
+    } finally {
+      busy = false;
+    }
+  }
+
+  /**
+   * Makes a workspace and opens it, with the starter.
+   * @param {string} name
+   */
+  async function createWorkspace(name) {
+    busy = true;
+    let made;
+    try {
+      made = await spaces.create(name);
+      workspaceNames = await spaces.list();
+    } catch (error) {
+      problem = `The workspace wasn't made: ${errorText(error)}`;
+      busy = false;
+      return;
+    }
+    busy = false;
+    await switchWorkspace(made);
+  }
+
+  /**
+   * Deletes the workspace `name` (the one open) with its files, and opens the default.
+   * @param {string} name
+   */
+  async function removeWorkspace(name) {
+    if (name === DEFAULT_WORKSPACE) return;
+    busy = true;
+    try {
+      leaveFor(DEFAULT_WORKSPACE);
+      try {
+        await spaces.remove(name);
+        keepOpen(null, name);
+      } catch (error) {
+        problem = `The workspace “${name}” wasn't deleted: ${errorText(error)}`;
+      }
+      workspaceNames = await spaces.list();
+      await start();
+    } catch (error) {
+      problem = `The workspaces weren't listed: ${errorText(error)}`;
+    } finally {
+      busy = false;
+    }
+  }
 
   /**
    * Opens the project, given the starter while it is empty (the first time, or everything
@@ -134,9 +274,7 @@
     const opened = project.entries.filter((entry) => languageOf(entry.name) !== null);
     const at = (/** @type {unknown} */ path) => opened.find((entry) => entry.path === path);
     const first =
-      at(settings.get(KEYS.open)) ??
-      at(MAIN_SCRIPT) ??
-      opened.find((entry) => entry.kind === 'script');
+      at(lastOpen()) ?? at(MAIN_SCRIPT) ?? opened.find((entry) => entry.kind === 'script');
     if (first) await openScript(first);
   }
 
@@ -213,7 +351,7 @@
     open = entry;
     files = imports;
     project.reveal(entry.path);
-    settings.set(KEYS.open, entry.path);
+    keepOpen(entry.path);
     show(text);
   }
 
@@ -237,7 +375,7 @@
   function closeScript() {
     open = null;
     files = {};
-    settings.set(KEYS.open, null);
+    keepOpen(null);
   }
 
   /** @param {string} text the file open, as the person edited it */
@@ -266,14 +404,14 @@
   /**
    * The person's choice for the script open, which another tab changed under their changes:
    * that tab's (for one it deleted, the script closed), or theirs, saved over it.
-   * @param {'disk' | 'mine'} keep
+   * @param {'disk' | 'mine'} choice
    */
-  function resolveConflict(keep) {
+  function resolveConflict(choice) {
     if (!open) return;
     const { path } = open;
-    project.scripts.resolve(path, keep);
+    project.scripts.resolve(path, choice);
     if (!project.scripts.has(path)) closeScript();
-    else if (keep === 'mine') void save(path);
+    else if (choice === 'mine') void save(path);
     else {
       keepEditor();
       show(project.scripts.text(path));
@@ -285,6 +423,19 @@
    * to it where it has nothing unsaved, and is closed where it was deleted.
    */
   async function readAgain() {
+    if (busy) return;
+    try {
+      workspaceNames = await spaces.list();
+    } catch (error) {
+      problem = `The workspaces weren't listed: ${errorText(error)}`;
+      return;
+    }
+    if (!workspaceNames.includes(workspace)) {
+      problem = `The workspace “${workspace}” was deleted in another tab.`;
+      leaveFor(DEFAULT_WORKSPACE);
+      await start();
+      return;
+    }
     try {
       const dropped = await project.scripts.check();
       if (open && dropped.includes(open.path)) {
@@ -321,7 +472,7 @@
     } else if (open && within(open.path, done.renamed.from)) {
       const path = done.renamed.to + open.path.slice(done.renamed.from.length);
       open = { ...open, path, name: nameOf(path) };
-      settings.set(KEYS.open, path);
+      keepOpen(path);
     }
   }
 
@@ -365,12 +516,12 @@
   /**
    * Puts files the person gave (dropped on the tree, picked to upload) in the folder `dir` (the
    * project's `addFiles`, asking about a name it has); a script replaced is read again.
-   * @param {File[]} files
+   * @param {File[]} given
    * @param {string} dir
    */
-  async function addFiles(files, dir) {
+  async function addFiles(given, dir) {
     const put = await project.addFiles(
-      files,
+      given,
       dir,
       (name, renamed, folder) =>
         /** @type {Promise<Clash>} */ (ask(clashQuestion(name, renamed, folder))),
@@ -419,11 +570,11 @@
   }
 
   /**
-   * What drops the menu `shown` once it closes, unless another opened in its place meanwhile.
-   * @param {typeof menu} shown
+   * What drops the menu `opened` once it closes, unless another opened in its place meanwhile.
+   * @param {typeof menu} opened
    */
-  const closer = (shown) => () => {
-    if (menu === shown) menu = null;
+  const closer = (opened) => () => {
+    if (menu === opened) menu = null;
   };
 
   /** @param {KeyboardEvent} event */
@@ -457,6 +608,14 @@
 
 <div class="ide" style:--files-width="{filesWidth}px">
   <nav class="side" aria-label="Files">
+    <Workspaces
+      names={workspaceNames}
+      current={workspace}
+      {busy}
+      onswitch={(name) => void switchWorkspace(name)}
+      oncreate={(name) => void createWorkspace(name)}
+      onremove={(name) => void removeWorkspace(name)}
+    />
     <div class="tree">
       <FileTree
         entries={project.entries}

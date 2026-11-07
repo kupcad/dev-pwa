@@ -1,7 +1,7 @@
 import { listFolder } from '@kupcad/files';
 import { describe, expect, it } from 'vitest';
 import { memoryFolder } from './memory-opfs.test-helper.js';
-import { opfsFiles, projectFolder } from './opfs.js';
+import { opfsFiles } from './opfs.js';
 
 /** The project's files, in a folder of a stand-in for OPFS, with a few files in it. */
 async function project() {
@@ -91,20 +91,15 @@ describe("the project's files", () => {
   });
 });
 
-it("keeps the project in a folder of the origin's private file system, made the first time", async () => {
-  const root = memoryFolder();
-  const storage = { getDirectory: async () => root };
-  const folder = await projectFolder(storage);
-  expect(folder.name).toBe('project');
-  expect(await projectFolder(storage)).toBe(folder);
-  // Its files at once, each call once the folder is there
-  const files = opfsFiles(projectFolder(storage));
+it('takes its folder once it is there, each call waiting for it', async () => {
+  const folder = memoryFolder();
+  const files = opfsFiles(Promise.resolve(folder));
   await files.write('/a.kup', 'cube(1)\n');
   expect(await opfsFiles(folder).read('/a.kup')).toBe('cube(1)\n');
 });
 
 it("fails each call as getting the project's folder did", async () => {
   const denied = new DOMException('No storage here', 'SecurityError');
-  const files = opfsFiles(projectFolder({ getDirectory: () => Promise.reject(denied) }));
+  const files = opfsFiles(Promise.reject(denied));
   await expect(files.readDir('/')).rejects.toBe(denied);
 });

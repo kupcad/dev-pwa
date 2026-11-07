@@ -1,21 +1,9 @@
-// The project's files in the browser's origin private file system (OPFS): one folder of it, its
-// entries by their paths from its root (`/main.kup`, `/parts/lid.kup`), listed for the tree
+// The project's files in the browser's origin private file system (OPFS): a workspace's folder
+// (workspaces.js), its entries by their paths from its root (`/main.kup`, `/parts/lid.kup`), listed for the tree
 // (`readDir`, as @kupcad/files' listFolder takes it), read, written, made, renamed and removed.
 // A rename is a copy, then the removal of what was copied: no rename is in every browser's OPFS.
 
 /** @import { DirEntry } from '@kupcad/files' */
-
-/** The folder of the origin's private file system the project is in. */
-const PROJECT_FOLDER = 'project';
-
-/**
- * The project's folder, made the first time.
- * @param {Pick<StorageManager, 'getDirectory'>} [storage]
- */
-export async function projectFolder(storage = navigator.storage) {
-  const root = await storage.getDirectory();
-  return root.getDirectoryHandle(PROJECT_FOLDER, { create: true });
-}
 
 /** The names a path has, from the root. @param {string} path */
 const namesOf = (path) => path.split('/').filter((name) => name !== '');

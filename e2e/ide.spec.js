@@ -260,7 +260,8 @@ test("takes another tab's change to the JSON file open as JSON still, nothing ru
   // Another tab writes it, and this one comes back to the front
   await page.evaluate(async () => {
     const root = await navigator.storage.getDirectory();
-    const project = await root.getDirectoryHandle('project');
+    const spaces = await root.getDirectoryHandle('workspaces');
+    const project = await spaces.getDirectoryHandle('Default');
     const file = await project.getFileHandle('kupcad.json');
     const writable = await file.createWritable();
     await writable.write('{ "name": "bins" }\n');
@@ -270,6 +271,66 @@ test("takes another tab's change to the JSON file open as JSON still, nothing ru
   await expect(page.locator('.cm-content')).toContainText('"name": "bins"');
   await expect(status(page)).toHaveCount(0);
   await expect(page.getByRole('list', { name: 'Parts' })).toHaveCount(0);
+});
+
+test('keeps each workspace a project of its own: made, switched between, and deleted, the default kept', async ({
+  page,
+}) => {
+  const errors = await opened(page);
+  const picker = page.getByRole('combobox', { name: 'Workspace' });
+  await expect(picker).toHaveValue('Default');
+  // The default can't be deleted
+  await expect(page.getByRole('button', { name: 'Delete…' })).toBeDisabled();
+
+  // A name the workspaces have, in any case, or none, is refused in the dialog
+  await page.getByRole('button', { name: 'New workspace…' }).click();
+  const making = page.getByRole('dialog', { name: 'New workspace' });
+  await making.getByRole('button', { name: 'Create' }).click();
+  await expect(making).toContainText('Give the workspace a name.');
+  await making.getByRole('textbox', { name: 'Name' }).fill('default');
+  await expect(making).toContainText('There is a workspace “default” already.');
+  await making.getByRole('textbox', { name: 'Name' }).fill('  Shelf ');
+  await making.getByRole('button', { name: 'Create' }).click();
+  await expect(making).toBeHidden();
+
+  // The new one opens on the starter, run
+  await expect(picker).toHaveValue('Shelf');
+  await expect(row(page, 'main.kup')).toHaveAttribute('aria-current', 'true', { timeout: RUN_MS });
+  await expect(status(page)).toHaveText(/Ready · \d+ ms/, { timeout: RUN_MS });
+  await files(page).getByRole('button', { name: 'New script' }).click();
+  await files(page).getByRole('textbox', { name: 'New script name' }).fill('shelf');
+  await page.keyboard.press('Enter');
+  await expect(row(page, 'shelf.kup')).toHaveAttribute('aria-current', 'true');
+  await page.keyboard.type('cube(3)\n');
+
+  // The default has its own files: none of Shelf's
+  await picker.selectOption('Default');
+  await expect(row(page, 'main.kup')).toHaveAttribute('aria-current', 'true', { timeout: RUN_MS });
+  await expect(row(page, 'shelf.kup')).toHaveCount(0);
+
+  // Back in Shelf after a reload, its script open last is open again, as it was written
+  await picker.selectOption('Shelf');
+  await expect(row(page, 'shelf.kup')).toHaveAttribute('aria-current', 'true', {
+    timeout: RUN_MS,
+  });
+  await page.reload();
+  await expect(picker).toHaveValue('Shelf', { timeout: RUN_MS });
+  await expect(row(page, 'shelf.kup')).toHaveAttribute('aria-current', 'true', {
+    timeout: RUN_MS,
+  });
+  await expect(page.locator('.cm-content')).toContainText('cube(3)');
+
+  // Deleting asks first; Cancel keeps it
+  await page.getByRole('button', { name: 'Delete…' }).click();
+  const deleting = page.getByRole('dialog', { name: 'Delete the workspace “Shelf”?' });
+  await deleting.getByRole('button', { name: 'Cancel' }).click();
+  await expect(picker).toHaveValue('Shelf');
+  await page.getByRole('button', { name: 'Delete…' }).click();
+  await deleting.getByRole('button', { name: 'Delete' }).click();
+  await expect(picker).toHaveValue('Default');
+  await expect(picker.getByRole('option')).toHaveText(['Default']);
+  await expect(row(page, 'main.kup')).toHaveAttribute('aria-current', 'true', { timeout: RUN_MS });
+  expect(errors).toEqual([]);
 });
 
 test('works offline once it has loaded, the core and all', async ({ page, context }) => {

@@ -57,33 +57,33 @@ describe("the header's Update", () => {
   });
 });
 
+/**
+ * A page in front, its registration just made, and how the page goes to the back or the front.
+ * @param {() => Promise<void>} [update] what looking does
+ */
+function openPage(update = async () => {}) {
+  const page = Object.assign(new EventTarget(), { visibilityState: 'visible' });
+  // Looks counted by hand: a spy (vi.fn) handles the promise it returns, and so would hide a
+  // failed look the page left unhandled
+  let looks = 0;
+  const registration = {
+    update: () => {
+      looks += 1;
+      return update();
+    },
+  };
+  checkForUpdates(/** @type {any} */ (registration), /** @type {any} */ (page));
+  /** @param {'visible' | 'hidden'} state */
+  const turn = (state) => {
+    page.visibilityState = state;
+    page.dispatchEvent(new Event('visibilitychange'));
+  };
+  return { looks: () => looks, turn };
+}
+
 describe('looking for a newer build while the page stays open', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
-
-  /**
-   * A page in front, its registration just made, and how the page goes to the back or the front.
-   * @param {() => Promise<void>} [update] what looking does
-   */
-  function openPage(update = async () => {}) {
-    const page = Object.assign(new EventTarget(), { visibilityState: 'visible' });
-    // Looks counted by hand: a spy (vi.fn) handles the promise it returns, and so would hide a
-    // failed look the page left unhandled
-    let looks = 0;
-    const registration = {
-      update: () => {
-        looks += 1;
-        return update();
-      },
-    };
-    checkForUpdates(/** @type {any} */ (registration), /** @type {any} */ (page));
-    /** @param {'visible' | 'hidden'} state */
-    const turn = (state) => {
-      page.visibilityState = state;
-      page.dispatchEvent(new Event('visibilitychange'));
-    };
-    return { looks: () => looks, turn };
-  }
 
   it('looks every hour the page stays in front', () => {
     const { looks } = openPage();

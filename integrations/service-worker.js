@@ -45,7 +45,7 @@ export async function builtFiles(root) {
       join(entry.parentPath, entry.name).slice(root.length).split(sep).filter(Boolean).join('/'),
     )
     .filter((path) => !NOT_CACHED.test(path))
-    .sort();
+    .toSorted();
 }
 
 /**
