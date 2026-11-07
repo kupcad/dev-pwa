@@ -1,6 +1,6 @@
 // What the origin's storage holds, as the IDE shows it under the files: how much of what the
-// browser allows is used (navigator.storage.estimate()), and whether the browser keeps it when it
-// frees space (persisted()). A browser without either says nothing of it.
+// browser allows is used (navigator.storage.estimate()), and whether the browser may clear it when
+// space runs low (persisted() false). A browser without either says nothing of it.
 
 /** The units sizes are said in, each a thousand of the one before (as the system's file manager says them). */
 const UNITS = ['bytes', 'KB', 'MB', 'GB', 'TB'];
@@ -23,18 +23,22 @@ export function formatBytes(bytes) {
 }
 
 /**
- * How much of the origin's storage is used, of how much, and whether it is kept when the browser
- * frees space (`· persistent`), as one line; empty where the browser doesn't say.
+ * How much of the origin's storage is used, of how much (`12 MB of 2 GB used`), and whether the
+ * browser may clear it when space runs low (it says it doesn't persist it); null where the
+ * browser doesn't say.
  * @param {Partial<Pick<StorageManager, 'estimate' | 'persisted'>> | undefined} [storage]
+ * @returns {Promise<{ used: string, mayClear: boolean } | null>}
  */
-export async function storageText(storage = globalThis.navigator?.storage) {
+export async function storageUse(storage = globalThis.navigator?.storage) {
   try {
     const estimate = await storage?.estimate?.();
-    if (estimate?.usage === undefined || estimate.quota === undefined) return '';
+    if (estimate?.usage === undefined || estimate.quota === undefined) return null;
     const persisted = await storage?.persisted?.().catch(() => undefined);
-    const kept = persisted === undefined ? '' : persisted ? ' · persistent' : ' · not persistent';
-    return `${formatBytes(estimate.usage)} of ${formatBytes(estimate.quota)} used${kept}`;
+    return {
+      used: `${formatBytes(estimate.usage)} of ${formatBytes(estimate.quota)} used`,
+      mayClear: persisted === false,
+    };
   } catch {
-    return '';
+    return null;
   }
 }

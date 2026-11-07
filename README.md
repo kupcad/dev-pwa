@@ -40,9 +40,11 @@ app works offline, and a browser can install it (a PWA). An Astro site of one pa
   Upload Files…: scripts and the files scripts read; a name the folder has asked about, Replace,
   Rename to the next free name or Cancel) and downloads a file (Download), each from a row's
   right-click menu (`@kupcad/files`' `ContextMenu`), the questions in its `AskDialog`. Under the files, a problem until it is
-  dismissed, else what the origin's storage holds of what the browser allows, and whether it is
-  persistent (`navigator.storage.estimate()`, `persisted()`, `src/lib/storage.js`; said again a
-  moment after a change, nothing said where a browser doesn't). Files dropped
+  dismissed, else what the origin's storage holds of what the browser allows
+  (`navigator.storage.estimate()`, `src/lib/storage.js`), with "May be cleared if space runs low"
+  where the browser doesn't persist it (`persisted()` false; its tooltip says installing the app
+  usually keeps the files, and Download .zip keeps a copy); said again a moment after a change,
+  nothing said where a browser doesn't. Files dropped
   anywhere else are refused, not opened in the IDE's place. A rename is a copy, then a removal: no
   rename is in every browser's OPFS. The first write asks the browser to keep the project when it
   frees space (`navigator.storage.persist()`).

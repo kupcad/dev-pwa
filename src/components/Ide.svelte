@@ -46,7 +46,7 @@
   import { opfsFiles } from '../lib/opfs.js';
   import { importable, MAIN_SCRIPT, sameFiles, STARTER, stemOf } from '../lib/project.js';
   import { DEFAULT_WORKSPACE, hashOf, workspaceOfHash, workspaces } from '../lib/workspaces.js';
-  import { storageText } from '../lib/storage.js';
+  import { storageUse } from '../lib/storage.js';
   import { MAX_ZIP_BYTES } from '../lib/zip.js';
   import Workspaces from './Workspaces.svelte';
 
@@ -64,6 +64,9 @@
   const SAVE_MS = 500;
   /** The settings' keys: the files' width, the workspace open, each workspace's file open last. */
   const KEYS = { files: 'ide.files', workspace: 'ide.workspace', open: 'ide.open' };
+  /** What the storage line's note that the browser may clear it means. */
+  const MAY_CLEAR =
+    "The browser may delete the IDE's files when the device runs low on space. Installing the app usually keeps them; Download .zip keeps a copy.";
   /** How long a change to the storage waits to be said, in milliseconds. */
   const STORAGE_MS = 1000;
   /** The channel the tabs tell each other of their changes to the workspaces on. */
@@ -124,8 +127,8 @@
   let opening = 0;
   /** Whether the browser was asked to keep the project when it frees space. */
   let asked = false;
-  /** What the origin's storage holds, as said under the files (empty: the browser doesn't say). */
-  let storage = $state('');
+  /** What the origin's storage holds, as said under the files (null: the browser doesn't say). */
+  let storage = $state.raw(/** @type {Awaited<ReturnType<typeof storageUse>>} */ (null));
   /** The wait before the storage is said again, while there is one. */
   let storageTimer = /** @type {ReturnType<typeof setTimeout> | undefined} */ (undefined);
   let playground = $state(/** @type {ReturnType<typeof Playground> | undefined} */ (undefined));
@@ -502,7 +505,7 @@
     if (storageTimer !== undefined) return;
     storageTimer = setTimeout(async () => {
       storageTimer = undefined;
-      storage = await storageText();
+      storage = await storageUse();
     }, STORAGE_MS);
   }
 
@@ -878,11 +881,10 @@
         <button type="button" aria-label="Dismiss" onclick={() => (problem = '')}>×</button>
       </p>
     {:else if storage}
-      <p
-        class="storage"
-        title="Persistent: the browser keeps it when short of space; not persistent: it may clear it"
-      >
-        {storage}
+      <p class="storage">
+        {storage.used}{#if storage.mayClear}<br /><span title={MAY_CLEAR}
+            >May be cleared if space runs low</span
+          >{/if}
       </p>
     {/if}
   </nav>
