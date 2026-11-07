@@ -422,6 +422,81 @@ test('renames the workspace open, in its case alone too, and duplicates it, its 
   expect(errors).toEqual([]);
 });
 
+test('keeps the workspace open in the URL: opened by it, and each tab in its own', async ({
+  page,
+  context,
+}) => {
+  const errors = await opened(page);
+  await expect(page).toHaveURL(/#w=Default$/);
+  await newWorkspace(page, 'Shelf 1', 'cube(3)\n');
+  await expect(page).toHaveURL(/#w=Shelf%201$/);
+  const steps = await page.evaluate(() => history.length);
+
+  // The person changes the URL: the workspace it names opens, no step added to the history
+  await page.evaluate(() => (location.hash = '#w=Default'));
+  await expect(picker(page)).toHaveValue('Default');
+  await expect(row(page, 'main.kup')).toHaveAttribute('aria-current', 'true', { timeout: RUN_MS });
+  await page.evaluate(() => (location.hash = '#w=Nowhere'));
+  await expect(files(page).getByRole('alert')).toContainText('There is no workspace “Nowhere”.');
+  await expect(page).toHaveURL(/#w=Default$/);
+  await picker(page).selectOption('Shelf 1');
+  await expect(page).toHaveURL(/#w=Shelf%201$/);
+  expect(await page.evaluate(() => history.length)).toBe(steps + 2);
+
+  // Another tab opens the one its URL names, this one keeping its own
+  const other = await context.newPage();
+  await other.goto('/#w=Default');
+  await expect(row(other, 'main.kup')).toHaveAttribute('aria-current', 'true', {
+    timeout: RUN_MS,
+  });
+  await expect(picker(other)).toHaveValue('Default');
+  await expect(picker(page)).toHaveValue('Shelf 1');
+  // One it doesn't have is the default's, the URL put right
+  await other.goto('/#w=Gone');
+  await expect(picker(other)).toHaveValue('Default', { timeout: RUN_MS });
+  await expect(other).toHaveURL(/#w=Default$/);
+  expect(errors).toEqual([]);
+});
+
+test("follows another tab's changes to the workspaces at once: made, renamed, deleted", async ({
+  page,
+  context,
+}) => {
+  await opened(page);
+  const other = await context.newPage();
+  await other.goto('/');
+  await expect(row(other, 'main.kup')).toHaveAttribute('aria-current', 'true', {
+    timeout: RUN_MS,
+  });
+
+  await newWorkspace(page, 'Bins', 'cube(4)\n');
+  await expect(picker(other).getByRole('option')).toHaveText(['Default', 'Bins']);
+  await picker(other).selectOption('Bins');
+  await expect(row(other, 'bins.kup')).toHaveAttribute('aria-current', 'true', {
+    timeout: RUN_MS,
+  });
+
+  await chooseForWorkspace(page, 'Rename…');
+  const renaming = page.getByRole('dialog', { name: 'Rename workspace' });
+  await renaming.getByRole('textbox', { name: 'Name' }).fill('Crates');
+  await renaming.getByRole('button', { name: 'Rename' }).click();
+  await expect(picker(other)).toHaveValue('Crates');
+  await expect(other).toHaveURL(/#w=Crates$/);
+  await expect(row(other, 'bins.kup')).toHaveAttribute('aria-current', 'true', {
+    timeout: RUN_MS,
+  });
+
+  await chooseForWorkspace(page, 'Delete…');
+  await page
+    .getByRole('dialog', { name: 'Delete the workspace “Crates”?' })
+    .getByRole('button', { name: 'Delete' })
+    .click();
+  await expect(picker(other)).toHaveValue('Default');
+  await expect(files(other).getByRole('alert')).toContainText(
+    'The workspace “Crates” was deleted in another tab.',
+  );
+});
+
 test('downloads a workspace as a zip, and imports it as a new one, its name made new', async ({
   page,
 }, testInfo) => {

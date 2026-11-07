@@ -23,8 +23,14 @@ app works offline, and a browser can install it (a PWA). An Astro site of one pa
   added where the name is taken), its files with or without a folder of their own around them.
   A zip is refused where a path leaves its folder (`..`, absolute, a `\`), a file's CRC is wrong,
   or it holds more than 10 000 files or 256 MB. Delete… deletes the one open with its files, once
-  a dialog confirms it, and opens `Default`. A workspace deleted in another tab is left for
-  `Default` when the page comes back to the front.
+  a dialog confirms it, and opens `Default`. The URL names the workspace open (`#w=<name>`,
+  URI-encoded, replaced, not added to the history): a page opens the one it names (else the one
+  open last, else `Default`), and opens another as the person changes it, so two tabs can work in
+  two workspaces. A tab tells the others of a workspace made, renamed or deleted
+  (`BroadcastChannel('kupcad-workspaces')`): they list them again at once, and one that has it
+  open follows it (renamed: opened by its new name, what wasn't saved yet saved there; deleted:
+  `Default` opened, which says so). The page coming back to the front lists them again too, for a
+  browser that says nothing.
 * **The project** (`@kupcad/files`' `Project` over `src/lib/opfs.js`): the workspace open's folder,
   `Default`'s given a starter while it is empty (`src/lib/project.js`: `main.kup`
   importing `parts/tray.kup`). The tree makes scripts and folders (its bar, a row's menu), renames

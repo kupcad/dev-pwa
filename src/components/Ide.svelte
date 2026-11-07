@@ -7,7 +7,9 @@
   one, empty, and opens it, Download .zip saves the one open as a zip, Import .zip… makes one of a
   zip and opens it, Rename… and Duplicate… rename and copy the one open (each a copy: OPFS has no
   rename) and open it, and Delete… deletes the one open with its files, the default left open; each
-  opens the file it had open last. Its tree (@kupcad/files) makes scripts and folders (its bar, a row's menu),
+  opens the file it had open last. The URL names the workspace open (#w=…; changed, it opens the
+  one it names), and the tabs tell each other of their changes to the workspaces (a
+  BroadcastChannel), which they follow at once. Its tree (@kupcad/files) makes scripts and folders (its bar, a row's menu),
   renames and deletes them, takes the person's files into a folder (dropped on it from the
   system's file manager, or uploaded from a row's menu: a name the folder has asked about,
   Replace, Rename or Cancel) and downloads one (a row's menu, a popover). A script clicked opens
@@ -42,11 +44,17 @@
   import { onMount, tick } from 'svelte';
   import { opfsFiles } from '../lib/opfs.js';
   import { importable, MAIN_SCRIPT, sameFiles, STARTER, stemOf } from '../lib/project.js';
-  import { DEFAULT_WORKSPACE, workspaces } from '../lib/workspaces.js';
+  import { DEFAULT_WORKSPACE, hashOf, workspaceOfHash, workspaces } from '../lib/workspaces.js';
   import { MAX_ZIP_BYTES } from '../lib/zip.js';
   import Workspaces from './Workspaces.svelte';
 
   /** @import { Clash, Entry, MenuItem } from '@kupcad/files' */
+
+  /**
+   * A change of the workspaces, as a tab tells the others of it: one made (created, duplicated,
+   * imported), deleted or renamed, or the files of one changed.
+   * @typedef {{ kind: 'made' | 'deleted' | 'files', name: string } | { kind: 'renamed', from: string, to: string }} Change
+   */
 
   /** The project's root, in its files' paths. */
   const ROOT = '/';
@@ -54,6 +62,8 @@
   const SAVE_MS = 500;
   /** The settings' keys: the files' width, the workspace open, each workspace's file open last. */
   const KEYS = { files: 'ide.files', workspace: 'ide.workspace', open: 'ide.open' };
+  /** The channel the tabs tell each other of their changes to the workspaces on. */
+  const CHANNEL = 'kupcad-workspaces';
   /** What the upload picker offers: the files a project shows. */
   const ACCEPT = [SCRIPT_EXTENSION, ...DATA_EXTENSIONS].map((extension) => `.${extension}`).join();
 
@@ -65,16 +75,18 @@
   const kept = (/** @type {Promise<void>} */ writing) => writing.then(keep);
   /** The workspaces there are, the default first. */
   let workspaceNames = $state.raw([DEFAULT_WORKSPACE]);
-  /** The workspace open last, opened first, until the list says it is still there. */
-  const lastWorkspace = settings.get(KEYS.workspace);
-  /** The workspace open. */
-  let workspace = $state(typeof lastWorkspace === 'string' ? lastWorkspace : DEFAULT_WORKSPACE);
+  /** The workspace the page opens first: the one its URL names, else the one open last. */
+  const opensFirst = firstWorkspace();
+  /** The workspace open: at first `opensFirst`, until the list says it is there. */
+  let workspace = $state(opensFirst);
   /** Whether a workspace is being opened, made or deleted: the workspaces ask nothing meanwhile. */
   let busy = $state(true);
+  /** The changes of the workspaces asked for, run one after another (`serially`). */
+  let queue = Promise.resolve();
+  /** What the tabs tell each other of their changes to the workspaces. */
+  let channel = /** @type {BroadcastChannel | null} */ (null);
   /** The workspace open's files. */
-  let fs = opfsFiles(
-    spaces.folder(typeof lastWorkspace === 'string' ? lastWorkspace : DEFAULT_WORKSPACE),
-  );
+  let fs = opfsFiles(spaces.folder(opensFirst));
   /** The project: the workspace open's tree, its scripts, the name being given in it, the saves waiting. */
   let project = $state.raw(projectOf(fs));
   /** The file open. */
@@ -113,8 +125,13 @@
   const conflict = $derived(open ? project.scripts.conflicts.get(open.path) : undefined);
 
   onMount(() => {
+    channel = new BroadcastChannel(CHANNEL);
+    channel.addEventListener('message', (event) => void heard(event.data));
     void begin();
-    return () => project.dispose();
+    return () => {
+      channel?.close();
+      project.dispose();
+    };
   });
 
   /**
@@ -142,6 +159,12 @@
     );
   }
 
+  /** The workspace the page opens first: the one its URL names, else the one open last, else the default. */
+  function firstWorkspace() {
+    const last = settings.get(KEYS.workspace);
+    return workspaceOfHash(location.hash) ?? (typeof last === 'string' ? last : DEFAULT_WORKSPACE);
+  }
+
   /** The file the workspace open had open last, by its path, or null. */
   function lastOpen() {
     const all = settings.get(KEYS.open);
@@ -165,17 +188,58 @@
     settings.set(KEYS.open, byWorkspace);
   }
 
-  /** Lists the workspaces, then opens the one open last (the default where it's gone). */
-  async function begin() {
+  /**
+   * Runs `task`, a change of the workspaces, once those asked before it are done: the
+   * workspaces ask nothing meanwhile (`busy`). Each task says its own failure.
+   * @param {() => Promise<void>} task
+   */
+  function serially(task) {
+    const run = queue.then(async () => {
+      busy = true;
+      try {
+        await task();
+      } finally {
+        busy = false;
+      }
+    });
+    queue = run.catch(() => {});
+    return run;
+  }
+
+  /** Lists the workspaces again; whether they were (else it says so). */
+  async function relist() {
     try {
       workspaceNames = await spaces.list();
+      return true;
     } catch (error) {
       problem = `The workspaces weren't listed: ${errorText(error)}`;
-      return;
+      return false;
     }
-    if (!workspaceNames.includes(workspace)) leaveFor(DEFAULT_WORKSPACE);
-    await start();
-    busy = false;
+  }
+
+  /**
+   * Tells the other tabs of a change to the workspaces.
+   * @param {Change} change
+   */
+  const announce = (change) => channel?.postMessage(change);
+
+  /** Shows the workspace open in the page's URL, in place of what it showed (no step in the history). */
+  function showInHash() {
+    const hash = hashOf(workspace);
+    if (location.hash !== hash) history.replaceState(history.state, '', hash);
+  }
+
+  /**
+   * Lists the workspaces, then opens the one the URL names, else the one open last (the default
+   * where it's gone).
+   */
+  function begin() {
+    return serially(async () => {
+      if (!(await relist())) return;
+      if (!workspaceNames.includes(workspace)) leaveFor(DEFAULT_WORKSPACE);
+      showInHash();
+      await start();
+    });
   }
 
   /**
@@ -191,6 +255,7 @@
     imported.clear();
     workspace = name;
     settings.set(KEYS.workspace, name);
+    showInHash();
     fs = opfsFiles(spaces.folder(name));
     project = projectOf(fs);
   }
@@ -208,88 +273,51 @@
   }
 
   /**
-   * Opens another workspace, the one open saved first.
+   * Opens the workspace `name`, the one open saved first (where it can't be, it stays open, and
+   * the URL says so again).
    * @param {string} name
    */
-  async function switchWorkspace(name) {
-    if (name === workspace) return;
-    busy = true;
-    try {
-      if (!(await savedFirst())) return;
+  async function openWorkspace(name) {
+    if (name !== workspace && (await savedFirst())) {
       leaveFor(name);
       await start();
-    } finally {
-      busy = false;
     }
+    showInHash();
+  }
+
+  /** Opens another workspace, the one picked. @param {string} name */
+  const switchWorkspace = (name) => serially(() => openWorkspace(name));
+
+  /** The URL names another workspace (the person changed it): it opens, where there is one. */
+  function hashChanged() {
+    const name = workspaceOfHash(location.hash);
+    if (name !== null && name !== workspace && !workspaceNames.includes(name)) {
+      problem = `There is no workspace “${name}”.`;
+    }
+    if (name !== null && workspaceNames.includes(name)) void switchWorkspace(name);
+    else showInHash();
   }
 
   /**
-   * Makes a workspace, empty, and opens it.
-   * @param {string} name
+   * Makes a workspace with `make` and opens it.
+   * @param {() => Promise<string>} make what makes it, saying the name it has
+   * @param {string} failed what is said where it fails
    */
-  async function createWorkspace(name) {
-    busy = true;
-    let made;
-    try {
-      made = await spaces.create(name);
-      workspaceNames = await spaces.list();
-    } catch (error) {
-      problem = `The workspace wasn't made: ${errorText(error)}`;
-      busy = false;
-      return;
-    }
-    busy = false;
-    await switchWorkspace(made);
-  }
-
-  /**
-   * Deletes the workspace `name` (the one open) with its files, and opens the default.
-   * @param {string} name
-   */
-  async function removeWorkspace(name) {
-    if (name === DEFAULT_WORKSPACE) return;
-    busy = true;
-    try {
-      leaveFor(DEFAULT_WORKSPACE);
+  const made = (make, failed) =>
+    serially(async () => {
+      let name;
       try {
-        await spaces.remove(name);
-        keepOpen(null, name);
+        name = await make();
       } catch (error) {
-        problem = `The workspace “${name}” wasn't deleted: ${errorText(error)}`;
+        problem = `${failed}: ${errorText(error)}`;
+        return;
       }
-      workspaceNames = await spaces.list();
-      await start();
-    } catch (error) {
-      problem = `The workspaces weren't listed: ${errorText(error)}`;
-    } finally {
-      busy = false;
-    }
-  }
+      announce({ kind: 'made', name });
+      if (await relist()) await openWorkspace(name);
+    });
 
-  /**
-   * Renames the workspace `from` (the one open, saved first) to `to`, and opens it again by its
-   * new name, on the file it had open.
-   * @param {string} from
-   * @param {string} to
-   */
-  async function renameWorkspace(from, to) {
-    busy = true;
-    try {
-      if (!(await savedFirst())) return;
-      const renamed = await spaces.rename(from, to);
-      if (renamed === from) return;
-      const last = lastOpen();
-      keepOpen(null, from);
-      keepOpen(last, renamed);
-      leaveFor(renamed);
-      workspaceNames = await spaces.list();
-      await start();
-    } catch (error) {
-      problem = `The workspace “${from}” wasn't renamed: ${errorText(error)}`;
-    } finally {
-      busy = false;
-    }
-  }
+  /** Makes a workspace, empty, and opens it. @param {string} name */
+  const createWorkspace = (name) => made(() => spaces.create(name), "The workspace wasn't made");
 
   /**
    * Makes the workspace `to` a copy of `from` (the one open, saved first), and opens it on the
@@ -297,60 +325,121 @@
    * @param {string} from
    * @param {string} to
    */
-  async function duplicateWorkspace(from, to) {
-    busy = true;
-    let made;
-    try {
-      if (!(await savedFirst())) return;
-      made = await spaces.duplicate(from, to);
-      keepOpen(lastOpen(), made);
-      workspaceNames = await spaces.list();
-    } catch (error) {
-      problem = `The workspace “${from}” wasn't duplicated: ${errorText(error)}`;
-      return;
-    } finally {
-      busy = false;
-    }
-    await switchWorkspace(made);
-  }
-
-  /**
-   * Saves the workspace `name` (the one open, saved first) to the person's downloads, as a zip.
-   * @param {string} name
-   */
-  async function downloadWorkspace(name) {
-    busy = true;
-    try {
-      if (await savedFirst()) download(await spaces.toZip(name), `${name}.zip`);
-    } catch (error) {
-      problem = `The workspace “${name}” wasn't downloaded: ${errorText(error)}`;
-    } finally {
-      busy = false;
-    }
-  }
+  const duplicateWorkspace = (from, to) =>
+    made(async () => {
+      if (!(await savedFirst())) throw new Error('Not all of it was saved.');
+      const copy = await spaces.duplicate(from, to);
+      keepOpen(lastOpen(), copy);
+      return copy;
+    }, `The workspace “${from}” wasn't duplicated`);
 
   /**
    * Makes the workspace `name` of the zip `file`'s files, and opens it.
    * @param {File} file
    * @param {string} name
    */
-  async function importWorkspace(file, name) {
-    busy = true;
-    let made;
-    try {
+  const importWorkspace = (file, name) =>
+    made(async () => {
       if (file.size > MAX_ZIP_BYTES) {
         throw new Error(`It is larger than ${MAX_ZIP_BYTES / 1024 / 1024} MB.`);
       }
-      made = await spaces.fromZip(name, new Uint8Array(await file.arrayBuffer()));
-      workspaceNames = await spaces.list();
+      return spaces.fromZip(name, new Uint8Array(await file.arrayBuffer()));
+    }, `${file.name} wasn't imported`);
+
+  /**
+   * Deletes the workspace `name` (the one open) with its files, and opens the default.
+   * @param {string} name
+   */
+  const removeWorkspace = (name) =>
+    serially(async () => {
+      if (name === DEFAULT_WORKSPACE) return;
+      leaveFor(DEFAULT_WORKSPACE);
+      try {
+        await spaces.remove(name);
+        keepOpen(null, name);
+        announce({ kind: 'deleted', name });
+      } catch (error) {
+        problem = `The workspace “${name}” wasn't deleted: ${errorText(error)}`;
+      }
+      await relist();
+      await start();
+    });
+
+  /**
+   * Renames the workspace `from` (the one open, saved first) to `to`, and opens it again by its
+   * new name, on the file it had open.
+   * @param {string} from
+   * @param {string} to
+   */
+  const renameWorkspace = (from, to) =>
+    serially(async () => {
+      if (!(await savedFirst())) return;
+      let renamed;
+      try {
+        renamed = await spaces.rename(from, to);
+      } catch (error) {
+        problem = `The workspace “${from}” wasn't renamed: ${errorText(error)}`;
+        return;
+      }
+      if (renamed === from) return;
+      announce({ kind: 'renamed', from, to: renamed });
+      await followRename(renamed);
+    });
+
+  /**
+   * Opens the workspace open again by its new name, `to`, on the file it had open, which is kept
+   * as its own; what wasn't saved yet (renamed in another tab) is saved in it.
+   * @param {string} to
+   */
+  async function followRename(to) {
+    const unsaved = [...project.scripts.unsaved].map((path) => [path, project.scripts.text(path)]);
+    const last = lastOpen();
+    keepOpen(null);
+    keepOpen(last, to);
+    leaveFor(to);
+    try {
+      for (const [path, text] of unsaved) await fs.write(path, text);
     } catch (error) {
-      problem = `${file.name} wasn't imported: ${errorText(error)}`;
-      return;
-    } finally {
-      busy = false;
+      problem = `Not all of “${to}” was saved: ${errorText(error)}`;
     }
-    await switchWorkspace(made);
+    await relist();
+    await start();
   }
+
+  /**
+   * Another tab changed the workspaces: they are listed again, and the one open follows a
+   * change to it (deleted: the default opened; renamed: opened by its new name; its files
+   * changed: read again).
+   * @param {Change} change
+   */
+  const heard = (change) =>
+    serially(async () => {
+      if (change.kind === 'files') {
+        if (change.name === workspace) await refreshProject();
+        return;
+      }
+      if (!(await relist())) return;
+      if (change.kind === 'renamed' && change.from === workspace) {
+        await followRename(change.to);
+      } else if (!workspaceNames.includes(workspace)) {
+        problem = `The workspace “${workspace}” was deleted in another tab.`;
+        leaveFor(DEFAULT_WORKSPACE);
+        await start();
+      }
+    });
+
+  /**
+   * Saves the workspace `name` (the one open, saved first) to the person's downloads, as a zip.
+   * @param {string} name
+   */
+  const downloadWorkspace = (name) =>
+    serially(async () => {
+      try {
+        if (await savedFirst()) download(await spaces.toZip(name), `${name}.zip`);
+      } catch (error) {
+        problem = `The workspace “${name}” wasn't downloaded: ${errorText(error)}`;
+      }
+    });
 
   /**
    * Opens the workspace's project, and the file open last (else its main script, else its
@@ -519,23 +608,24 @@
   }
 
   /**
-   * Reads the project again, as another tab may have changed it: the script open takes a change
-   * to it where it has nothing unsaved, and is closed where it was deleted.
+   * Reads the workspaces and the project again, as another tab may have changed them: the
+   * workspace open, deleted there, is left for the default.
    */
   async function readAgain() {
     if (busy) return;
-    try {
-      workspaceNames = await spaces.list();
-    } catch (error) {
-      problem = `The workspaces weren't listed: ${errorText(error)}`;
-      return;
-    }
+    if (!(await relist())) return;
     if (!workspaceNames.includes(workspace)) {
-      problem = `The workspace “${workspace}” was deleted in another tab.`;
-      leaveFor(DEFAULT_WORKSPACE);
-      await start();
+      await heard({ kind: 'deleted', name: workspace });
       return;
     }
+    await refreshProject();
+  }
+
+  /**
+   * Reads the project again: the script open takes a change to it where it has nothing unsaved,
+   * and is closed where it was deleted.
+   */
+  async function refreshProject() {
     try {
       const dropped = await project.scripts.check();
       if (open && dropped.includes(open.path)) {
@@ -696,6 +786,7 @@
 <svelte:window
   onkeydown={keydown}
   onfocus={() => void readAgain()}
+  onhashchange={hashChanged}
   onbeforeunload={beforeunload}
   ondragover={refuseStrayDrop}
   ondrop={refuseStrayDrop}
