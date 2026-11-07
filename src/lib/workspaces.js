@@ -1,10 +1,11 @@
 // The IDE's workspaces: projects of their own, each a folder of the browser's private file system
 // under `workspaces/` (OPFS has no namespaces of its own), its name the folder's. The default one
 // is always there and can't be deleted; the others are made, and deleted with all their files.
+// Each is renamed and duplicated by copying its folder (OPFS has no rename).
 // Each is downloaded as a zip of its files in a folder named for it, and a zip is imported as a
 // new one, its files with or without such a folder.
 
-import { opfsFiles } from './opfs.js';
+import { copyFolder, opfsFiles } from './opfs.js';
 import { unzip, zip } from './zip.js';
 
 /** @import { ZipEntry } from './zip.js' */
@@ -116,6 +117,18 @@ export function workspaces(storage = navigator.storage) {
     }
   };
 
+  /**
+   * Moves the workspace `from` to `to`, a name no other has: a copy, then the deletion of what
+   * was copied (OPFS has no rename).
+   * @param {string} from
+   * @param {string} to
+   */
+  const move = async (from, to) => {
+    const source = await (await root()).getDirectoryHandle(from);
+    await made(to, (folder) => copyFolder(source, folder));
+    await (await root()).removeEntry(from, { recursive: true });
+  };
+
   return {
     /**
      * The workspaces' names: the default first (made if it isn't there), then the others in
@@ -160,11 +173,49 @@ export function workspaces(storage = navigator.storage) {
      * `name` trimmed, where it can be a new workspace's; refused as `workspaceNameError` refuses
      * it otherwise.
      * @param {string} name
+     * @param {string} [except] a workspace whose name it may have (one being renamed)
      */
-    async newName(name) {
-      const error = workspaceNameError(name, await this.list());
+    async newName(name, except) {
+      const others = (await this.list()).filter((other) => other !== except);
+      const error = workspaceNameError(name, others);
       if (error !== null) throw new Error(error);
       return name.trim();
+    },
+
+    /**
+     * Makes the workspace `to`, a copy of `from` with all its files.
+     * @param {string} from
+     * @param {string} to
+     * @returns {Promise<string>} the name it was made with
+     */
+    async duplicate(from, to) {
+      const trimmed = await this.newName(to);
+      const source = await this.folder(from);
+      await made(trimmed, (folder) => copyFolder(source, folder));
+      return trimmed;
+    },
+
+    /**
+     * Renames the workspace `from` to `to`, the default never; its own name, in another case,
+     * is one it may be given.
+     * @param {string} from
+     * @param {string} to
+     * @returns {Promise<string>} the name it was given
+     */
+    async rename(from, to) {
+      if (from === DEFAULT_WORKSPACE) throw new Error('The default workspace can’t be renamed.');
+      const trimmed = await this.newName(to, from);
+      if (trimmed === from) return from;
+      if (trimmed.toLowerCase() === from.toLowerCase()) {
+        // A browser's OPFS may keep its names in a file system that ignores case, where the
+        // copy would be the folder itself: it goes by a name of its own first
+        const between = uniqueWorkspaceName(`${trimmed} (renaming)`, await this.list());
+        await move(from, between);
+        await move(between, trimmed);
+      } else {
+        await move(from, trimmed);
+      }
+      return trimmed;
     },
 
     /**

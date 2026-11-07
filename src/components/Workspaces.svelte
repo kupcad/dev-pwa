@@ -1,10 +1,11 @@
 <!--
   @component
   The workspaces, above the files: New workspace… on a row of its own, then the one open, picked
-  from the list, and its menu (⋯, @kupcad/files' ContextMenu): Download .zip, Import .zip… (a
-  zip picked becomes a new workspace) and Delete…. A name is asked in a dialog (NameDialog,
-  refused as workspaces.js refuses one); deleting asks first (@kupcad/files' AskDialog), saying
-  what is lost. The default can't be deleted: its menu has no Delete….
+  from the list, and its menu (⋯, @kupcad/files' ContextMenu): Rename…, Duplicate…, Download .zip,
+  Import .zip… (a zip picked becomes a new workspace) and Delete…. A name is asked in a dialog
+  (NameDialog, refused as workspaces.js refuses one; a rename may keep its own name, in another
+  case too); deleting asks first (@kupcad/files' AskDialog), saying what is lost. The default
+  can't be renamed or deleted: its menu has neither.
 -->
 <script>
   import { AskDialog, ContextMenu } from '@kupcad/files';
@@ -22,6 +23,9 @@
    * @property {(name: string) => void} onswitch the person picked another
    * @property {(name: string) => void} oncreate the person named a new one (trimmed, refused by none)
    * @property {(name: string) => void} onremove the person confirmed deleting the one open
+   * @property {(from: string, to: string) => void} onrename the person renamed the one open
+   * @property {(from: string, to: string) => void} onduplicate the person named a copy of the one
+   *   open
    * @property {(name: string) => void} ondownload the person asked for the one open as a zip
    * @property {(file: File, name: string) => void} onimport the person picked a zip to import,
    *   and named the workspace it makes
@@ -35,13 +39,16 @@
     onswitch,
     oncreate,
     onremove,
+    onrename,
+    onduplicate,
     ondownload,
     onimport,
   } = $props();
 
   /**
-   * The name asked: what for, the name it starts with, and what is done with the one given.
-   * @type {{ title: string, action: string, value: string, done: (name: string) => void } | null}
+   * The name asked: what for, the name it starts with, the names it may not be where not all the
+   * workspaces' (a rename may keep its own), and what is done with the one given.
+   * @type {{ title: string, action: string, value: string, taken?: string[], done: (name: string) => void } | null}
    */
   let naming = $state.raw(null);
   /** Whether deleting the one open is being asked. */
@@ -50,16 +57,41 @@
   let menu = $state.raw(/** @type {{ x: number, y: number } | null} */ (null));
   let picker = $state(/** @type {HTMLInputElement | undefined} */ (undefined));
 
-  /** The menu of the one open: the default's has nothing that would delete it. */
-  const items = $derived(
-    /** @type {MenuItem[]} */ ([
+  /** The menu of the one open: the default's has nothing that would rename or delete it. */
+  const items = $derived.by(() => {
+    const own = current !== DEFAULT_WORKSPACE;
+    /** @type {MenuItem[]} */
+    const all = [];
+    if (own) all.push({ text: 'Rename…', action: startRename });
+    all.push(
+      { text: 'Duplicate…', action: startDuplicate },
       { text: 'Download .zip', action: () => ondownload(current) },
       { text: 'Import .zip…', action: () => picker?.click() },
-      ...(current === DEFAULT_WORKSPACE
-        ? []
-        : /** @type {MenuItem[]} */ (['-', { text: 'Delete…', action: () => (deleting = true) }])),
-    ]),
-  );
+    );
+    if (own) all.push('-', { text: 'Delete…', action: () => (deleting = true) });
+    return all;
+  });
+
+  function startRename() {
+    const from = current;
+    naming = {
+      title: 'Rename workspace',
+      action: 'Rename',
+      value: from,
+      taken: names.filter((name) => name !== from),
+      done: (to) => onrename(from, to),
+    };
+  }
+
+  function startDuplicate() {
+    const from = current;
+    naming = {
+      title: 'Duplicate workspace',
+      action: 'Duplicate',
+      value: uniqueWorkspaceName(`${from} copy`, names),
+      done: (to) => onduplicate(from, to),
+    };
+  }
 
   /** @param {MouseEvent & { currentTarget: HTMLButtonElement }} event */
   function openMenu(event) {
@@ -142,7 +174,7 @@
     title={naming.title}
     action={naming.action}
     value={naming.value}
-    {names}
+    names={naming.taken ?? names}
     onname={named}
     oncancel={() => (naming = null)}
   />

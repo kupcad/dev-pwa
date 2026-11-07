@@ -358,6 +358,70 @@ test('keeps each workspace a project of its own: made, switched between, and del
   expect(errors).toEqual([]);
 });
 
+/**
+ * Makes the workspace `name` from the bar, which opens it, and a script `name.kup` in it with
+ * `text` typed in.
+ * @param {Page} page
+ * @param {string} name
+ * @param {string} text
+ */
+async function newWorkspace(page, name, text) {
+  await page.getByRole('button', { name: 'New workspace…' }).click();
+  const making = page.getByRole('dialog', { name: 'New workspace' });
+  await making.getByRole('textbox', { name: 'Name' }).fill(name);
+  await making.getByRole('button', { name: 'Create' }).click();
+  await expect(picker(page)).toHaveValue(name);
+  await files(page).getByRole('button', { name: 'New script' }).click();
+  await files(page).getByRole('textbox', { name: 'New script name' }).fill(name.toLowerCase());
+  await page.keyboard.press('Enter');
+  await expect(row(page, `${name.toLowerCase()}.kup`)).toHaveAttribute('aria-current', 'true');
+  await page.keyboard.type(text);
+}
+
+test('renames the workspace open, in its case alone too, and duplicates it, its files with it', async ({
+  page,
+}) => {
+  const errors = await opened(page);
+  // The default can't be renamed
+  await page.getByRole('button', { name: 'Workspace actions' }).click();
+  await expect(
+    page
+      .getByRole('menu', { name: 'Workspace “Default”' })
+      .getByRole('menuitem', { name: 'Rename…' }),
+  ).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await newWorkspace(page, 'Shelf', 'cube(3)\n');
+
+  // Renamed with what was typed and not yet saved, the script open still open
+  await chooseForWorkspace(page, 'Rename…');
+  const renaming = page.getByRole('dialog', { name: 'Rename workspace' });
+  const name = renaming.getByRole('textbox', { name: 'Name' });
+  await expect(name).toHaveValue('Shelf');
+  await name.fill('default');
+  await expect(renaming).toContainText('There is a workspace “default” already.');
+  await name.fill('Bins');
+  await renaming.getByRole('button', { name: 'Rename' }).click();
+  await expect(picker(page)).toHaveValue('Bins');
+  await expect(picker(page).getByRole('option')).toHaveText(['Default', 'Bins']);
+  await expect(row(page, 'shelf.kup')).toHaveAttribute('aria-current', 'true');
+  await expect(page.locator('.cm-content')).toContainText('cube(3)');
+
+  await chooseForWorkspace(page, 'Rename…');
+  await name.fill('BINS');
+  await renaming.getByRole('button', { name: 'Rename' }).click();
+  await expect(picker(page).getByRole('option')).toHaveText(['Default', 'BINS']);
+
+  await chooseForWorkspace(page, 'Duplicate…');
+  const duplicating = page.getByRole('dialog', { name: 'Duplicate workspace' });
+  await expect(duplicating.getByRole('textbox', { name: 'Name' })).toHaveValue('BINS copy');
+  await duplicating.getByRole('button', { name: 'Duplicate' }).click();
+  await expect(picker(page)).toHaveValue('BINS copy');
+  await expect(picker(page).getByRole('option')).toHaveText(['Default', 'BINS', 'BINS copy']);
+  await expect(row(page, 'shelf.kup')).toHaveAttribute('aria-current', 'true');
+  await expect(page.locator('.cm-content')).toContainText('cube(3)');
+  expect(errors).toEqual([]);
+});
+
 test('downloads a workspace as a zip, and imports it as a new one, its name made new', async ({
   page,
 }, testInfo) => {

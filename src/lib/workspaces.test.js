@@ -116,6 +116,27 @@ const SHELF = {
 };
 
 describe('a workspace', () => {
+  it('is duplicated with all its files, the copy a workspace of its own', async () => {
+    const { spaces } = await withShelf();
+    expect(await spaces.duplicate('Shelf', ' Shelf copy ')).toBe('Shelf copy');
+    expect(await contentOf(spaces, 'Shelf copy')).toEqual(SHELF);
+    await opfsFiles(spaces.folder('Shelf copy')).write('/main.kup', 'cube(9)\n');
+    expect(await contentOf(spaces, 'Shelf')).toEqual(SHELF);
+    await expect(spaces.duplicate('Shelf', 'shelf')).rejects.toThrow('already');
+  });
+
+  it('is renamed with its files, in its case alone too, but the default never', async () => {
+    const { spaces } = await withShelf();
+    expect(await spaces.rename('Shelf', 'Bins')).toBe('Bins');
+    expect(await spaces.list()).toEqual([DEFAULT_WORKSPACE, 'Bins']);
+    expect(await contentOf(spaces, 'Bins')).toEqual(SHELF);
+    expect(await spaces.rename('Bins', 'BINS')).toBe('BINS');
+    expect(await spaces.list()).toEqual([DEFAULT_WORKSPACE, 'BINS']);
+    expect(await contentOf(spaces, 'BINS')).toEqual(SHELF);
+    await expect(spaces.rename('BINS', 'default')).rejects.toThrow('already');
+    await expect(spaces.rename(DEFAULT_WORKSPACE, 'Main')).rejects.toThrow('can’t be renamed');
+  });
+
   it('is zipped in a folder named for it, and imported from that zip as it was', async () => {
     const { spaces } = await withShelf();
     const zipped = new Uint8Array(await (await spaces.toZip('Shelf')).arrayBuffer());

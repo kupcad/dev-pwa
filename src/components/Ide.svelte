@@ -5,7 +5,8 @@
   the default given a starter while it is empty (project.js). The workspaces are above the files
   (Workspaces): one picked opens its own project (the one open saved first), New workspace… makes
   one, empty, and opens it, Download .zip saves the one open as a zip, Import .zip… makes one of a
-  zip and opens it, and Delete… deletes the one open with its files, the default left open; each
+  zip and opens it, Rename… and Duplicate… rename and copy the one open (each a copy: OPFS has no
+  rename) and open it, and Delete… deletes the one open with its files, the default left open; each
   opens the file it had open last. Its tree (@kupcad/files) makes scripts and folders (its bar, a row's menu),
   renames and deletes them, takes the person's files into a folder (dropped on it from the
   system's file manager, or uploaded from a row's menu: a name the folder has asked about,
@@ -141,12 +142,14 @@
     );
   }
 
-  /** The file the workspace open had open last, by its path. */
+  /** The file the workspace open had open last, by its path, or null. */
   function lastOpen() {
     const all = settings.get(KEYS.open);
-    return typeof all === 'object' && all !== null
-      ? /** @type {Record<string, unknown>} */ (all)[workspace]
-      : undefined;
+    const path =
+      typeof all === 'object' && all !== null
+        ? /** @type {Record<string, unknown>} */ (all)[workspace]
+        : undefined;
+    return typeof path === 'string' ? path : null;
   }
 
   /**
@@ -193,6 +196,18 @@
   }
 
   /**
+   * Saves all of the workspace open, its editor's file as it is: whether it all was (else what
+   * would be done to it isn't, which says so).
+   */
+  async function savedFirst() {
+    keepEditor();
+    await saveAll();
+    if (project.scripts.unsaved.size === 0) return true;
+    problem = `Not all of “${workspace}” was saved, so it stays as it is.`;
+    return false;
+  }
+
+  /**
    * Opens another workspace, the one open saved first.
    * @param {string} name
    */
@@ -200,12 +215,7 @@
     if (name === workspace) return;
     busy = true;
     try {
-      keepEditor();
-      await saveAll();
-      if (project.scripts.unsaved.size > 0) {
-        problem = `Not all of “${workspace}” was saved, so it stays open.`;
-        return;
-      }
+      if (!(await savedFirst())) return;
       leaveFor(name);
       await start();
     } finally {
@@ -257,15 +267,61 @@
   }
 
   /**
+   * Renames the workspace `from` (the one open, saved first) to `to`, and opens it again by its
+   * new name, on the file it had open.
+   * @param {string} from
+   * @param {string} to
+   */
+  async function renameWorkspace(from, to) {
+    busy = true;
+    try {
+      if (!(await savedFirst())) return;
+      const renamed = await spaces.rename(from, to);
+      if (renamed === from) return;
+      const last = lastOpen();
+      keepOpen(null, from);
+      keepOpen(last, renamed);
+      leaveFor(renamed);
+      workspaceNames = await spaces.list();
+      await start();
+    } catch (error) {
+      problem = `The workspace “${from}” wasn't renamed: ${errorText(error)}`;
+    } finally {
+      busy = false;
+    }
+  }
+
+  /**
+   * Makes the workspace `to` a copy of `from` (the one open, saved first), and opens it on the
+   * file `from` has open.
+   * @param {string} from
+   * @param {string} to
+   */
+  async function duplicateWorkspace(from, to) {
+    busy = true;
+    let made;
+    try {
+      if (!(await savedFirst())) return;
+      made = await spaces.duplicate(from, to);
+      keepOpen(lastOpen(), made);
+      workspaceNames = await spaces.list();
+    } catch (error) {
+      problem = `The workspace “${from}” wasn't duplicated: ${errorText(error)}`;
+      return;
+    } finally {
+      busy = false;
+    }
+    await switchWorkspace(made);
+  }
+
+  /**
    * Saves the workspace `name` (the one open, saved first) to the person's downloads, as a zip.
    * @param {string} name
    */
   async function downloadWorkspace(name) {
     busy = true;
     try {
-      keepEditor();
-      await saveAll();
-      download(await spaces.toZip(name), `${name}.zip`);
+      if (await savedFirst()) download(await spaces.toZip(name), `${name}.zip`);
     } catch (error) {
       problem = `The workspace “${name}” wasn't downloaded: ${errorText(error)}`;
     } finally {
@@ -316,7 +372,7 @@
     }
     await listNow();
     const opened = project.entries.filter((entry) => languageOf(entry.name) !== null);
-    const at = (/** @type {unknown} */ path) => opened.find((entry) => entry.path === path);
+    const at = (/** @type {string | null} */ path) => opened.find((entry) => entry.path === path);
     const first =
       at(lastOpen()) ?? at(MAIN_SCRIPT) ?? opened.find((entry) => entry.kind === 'script');
     if (first) await openScript(first);
@@ -659,6 +715,8 @@
       onswitch={(name) => void switchWorkspace(name)}
       oncreate={(name) => void createWorkspace(name)}
       onremove={(name) => void removeWorkspace(name)}
+      onrename={(from, to) => void renameWorkspace(from, to)}
+      onduplicate={(from, to) => void duplicateWorkspace(from, to)}
       ondownload={(name) => void downloadWorkspace(name)}
       onimport={(file, name) => void importWorkspace(file, name)}
     />

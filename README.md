@@ -14,7 +14,10 @@ app works offline, and a browser can install it (a PWA). An Astro site of one pa
   dialog (`NameDialog.svelte`: not empty, at most 64 characters, no `/` or `\`, not one there is
   in any case) and opens the new one, empty: only `Default` is given the starter, as an example.
   Picking one in the list saves the one open and opens it, on the file it had open last. The ⋯
-  menu beside the list has the rest. Download .zip saves the one open as a zip of its files in a
+  menu beside the list has the rest. Rename… (not `Default`) and Duplicate… (named `<name> copy`)
+  copy the one open's folder (OPFS has no rename; a rename in its case alone goes by a name of its
+  own between, as a file system that ignores case would take the copy for the folder itself),
+  save it first and open the result on the file it had open. Download .zip saves the one open as a zip of its files in a
   folder named for it (`src/lib/zip.js`: deflated with the browser's own `CompressionStream`, no
   library); Import .zip… makes a new workspace of a zip, named after the zip's file (a number
   added where the name is taken), its files with or without a folder of their own around them.
